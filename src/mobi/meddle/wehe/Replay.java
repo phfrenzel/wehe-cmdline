@@ -832,399 +832,363 @@ public class Replay {
    * @return 0 if successful; error code otherwise
    */
   private int runTest() {
-    String[] types;
-    /*
-     * Step A: Flip a coin to decide which replay type to run first.
-     */
-    //"random" test for ports is port 443
-    if (Math.random() < 0.5) {
-      types = new String[]{"open", "random"};
-    } else {
-      types = new String[]{"random", "open"};
+    boolean portBlocked = false;
+    for (WebSocketConnection w : wsConns) { //if using MLab, check that still connected
+      Log.d("WebSocket", "Before running test WebSocket (id: " + w.getId() + ") connectivity check: "
+              + (w.isOpen() ? "CONNECTED" : "CLOSED"));
     }
 
     /*
-     * Step B: Run replays.
+     * Step 0: Initialize variables.
      */
-    int iteration = 1;
-    boolean portBlocked = false;
-    for (String channel : types) {
-      for (WebSocketConnection w : wsConns) { //if using MLab, check that still connected
-        Log.d("WebSocket", "Before running test WebSocket (id: " + w.getId() + ") connectivity check: "
-                + (w.isOpen() ? "CONNECTED" : "CLOSED"));
+    // Based on the type selected load open or random trace of given application
+    this.appData = unpickleJSON(app.getDataFile());
+
+    try {
+      Log.ui("updateStatus", S.CREATE_SIDE_CHANNEL);
+      int sideChannelPort = Config.combined_sidechannel_port;
+
+      Log.d("Servers", servers + " metadata " + metadataServer);
+      // This side channel is used to communicate with the server in bytes mode and to
+      // run traces, it send tcp and udp packets and receives the same from the server
+      //Server handles communication in handle() function in server_replay.py in server
+      //code
+      ArrayList<CombinedSideChannel> sideChannels = new ArrayList<>();
+      int id = 0;
+      //each concurrent test gets its own sidechannel because each concurrent test is run on
+      //a different server
+      for (String server : servers) {
+        sideChannels.add(new CombinedSideChannel(id, sslSocketFactory,
+                server, sideChannelPort, appData.isTCP()));
+        id++;
+      }
+
+      ArrayList<JitterBean> jitterBeans = new ArrayList<>();
+      for (CombinedSideChannel ignored : sideChannels) {
+        jitterBeans.add(new JitterBean());
+      }
+
+      //Get user's IP address
+      String replayPort = "80";
+      String ipThroughProxy = "127.0.0.1";
+      if (appData.isTCP()) {
+        for (String csp : appData.getTcpCSPs()) {
+          replayPort = csp.substring(csp.lastIndexOf('.') + 1);
+        }
+        ipThroughProxy = getPublicIP(replayPort);
+        if (ipThroughProxy.equals("-1")) { //port is blocked; move on to next replay
+          portBlocked = true;
+          return 0;
+        }
+      }
+
+      // testId is how server knows if the trace ran was open or random
+      testId = 0;
+
+      if (doTest) {
+        Log.w("Replay", "include -Test string");
       }
 
       /*
-       * Step 0: Initialize variables.
+       * Step 1: Tell server about the replay that is about to happen.
        */
-      // Based on the type selected load open or random trace of given application
-      if (channel.equalsIgnoreCase("open")) {
-        this.appData = unpickleJSON(app.getDataFile());
-      } else if (channel.equalsIgnoreCase("random")) {
-        this.appData = unpickleJSON(app.getRandomDataFile());
-      } else {
-        Log.wtf("replayIndex", "replay name error: " + channel);
+      int i = 0;
+      for (CombinedSideChannel sc : sideChannels) {
+        // This is group of values that is used to track traces on server
+        // Youtube;False;0;DiffDetector;0;129.10.9.93;1.0
+        //set extra string to number tries needed to access MLab server
+        Config.extraString = numMLab.size() == 0 ? "0" : numMLab.get(i).toString();
+        sc.declareID(appData.getReplayName(), "True",
+                randomID, String.valueOf(historyCount), String.valueOf(testId),
+                doTest ? Config.extraString + "-Test" : Config.extraString,
+                ipThroughProxy, Consts.VERSION_NAME);
+
+        // This tuple tells the server if the server should operate on packets of traces
+        // and if so which packets to process
+        sc.sendChangeSpec(-1, "null", "null");
+        i++;
       }
 
-      try {
-        Log.ui("updateStatus", iteration + "/" + types.length + " " + S.CREATE_SIDE_CHANNEL);
-        int sideChannelPort = Config.combined_sidechannel_port;
+      /*
+       * Step 2: Ask server for permission to run replay.
+       */
+      Log.ui("updateStatus", S.ASK4PERMISSION);
+      // Now to move forward we ask for server permission
+      ArrayList<Integer> numOfTimeSlices = new ArrayList<>();
+      for (CombinedSideChannel sc : sideChannels) {
+        String[] permission = sc.ask4Permission();
+        String status = permission[0].trim();
 
-        Log.d("Servers", servers + " metadata " + metadataServer);
-        // This side channel is used to communicate with the server in bytes mode and to
-        // run traces, it send tcp and udp packets and receives the same from the server
-        //Server handles communication in handle() function in server_replay.py in server
-        //code
-        ArrayList<CombinedSideChannel> sideChannels = new ArrayList<>();
-        int id = 0;
-        //each concurrent test gets its own sidechannel because each concurrent test is run on
-        //a different server
-        for (String server : servers) {
-          sideChannels.add(new CombinedSideChannel(id, sslSocketFactory,
-                  server, sideChannelPort, appData.isTCP()));
-          id++;
-        }
+        Log.d("Replay", "Channel " + sc.getId() + ": permission[0]: " + status
+                + " permission[1]: " + permission[1]);
 
-        ArrayList<JitterBean> jitterBeans = new ArrayList<>();
-        for (CombinedSideChannel ignored : sideChannels) {
-          jitterBeans.add(new JitterBean());
-        }
-
-        // initialize endOfTest value
-        boolean endOfTest = false; //true if last replay in this test is running
-        if (channel.equalsIgnoreCase(types[types.length - 1])) {
-          Log.i("Replay", "last replay running " + types[types.length - 1] + "!");
-          endOfTest = true;
-        }
-
-        //Get user's IP address
-        String replayPort = "80";
-        String ipThroughProxy = "127.0.0.1";
-        if (appData.isTCP()) {
-          for (String csp : appData.getTcpCSPs()) {
-            replayPort = csp.substring(csp.lastIndexOf('.') + 1);
+        String permissionError = permission[1].trim();
+        if (status.equals("0")) {
+          int errorCode;
+          // These are the different errors that server can report
+          switch (permissionError) {
+            case "1": //server cannot identify replay
+              Log.ui("ERR_PERM_REPLAY", S.ERROR_UNKNOWN_REPLAY);
+              errorCode = Consts.ERR_PERM_REPLAY;
+              break;
+            case "2": //only one replay can run at a time per IP
+              Log.ui("ERR_PERM_IP", S.ERROR_IP_CONNECTED);
+              errorCode = Consts.ERR_PERM_IP;
+              break;
+            case "3": //server CPU > 95%, disk > 95%, or bandwidth > 2000 Mbps
+              Log.ui("ERR_PERM_RES", S.ERROR_LOW_RESOURCES);
+              errorCode = Consts.ERR_PERM_RES;
+              break;
+            default:
+              Log.ui("ERR_PERM_UNK", S.ERROR_UNKNOWN);
+              errorCode = Consts.ERR_PERM_UNK;
           }
-          ipThroughProxy = getPublicIP(replayPort);
-          if (ipThroughProxy.equals("-1")) { //port is blocked; move on to next replay
-            portBlocked = true;
-            iteration++;
-            continue;
-          }
+          return errorCode;
         }
 
-        // testId is how server knows if the trace ran was open or random
-        testId = channel.equalsIgnoreCase("open") ? 0 : 1;
-
-        if (doTest) {
-          Log.w("Replay", "include -Test string");
-        }
-
-        /*
-         * Step 1: Tell server about the replay that is about to happen.
-         */
-        int i = 0;
-        for (CombinedSideChannel sc : sideChannels) {
-          // This is group of values that is used to track traces on server
-          // Youtube;False;0;DiffDetector;0;129.10.9.93;1.0
-          //set extra string to number tries needed to access MLab server
-          Config.extraString = numMLab.size() == 0 ? "0" : numMLab.get(i).toString();
-          sc.declareID(appData.getReplayName(), endOfTest ? "True" : "False",
-                  randomID, String.valueOf(historyCount), String.valueOf(testId),
-                  doTest ? Config.extraString + "-Test" : Config.extraString,
-                  ipThroughProxy, Consts.VERSION_NAME);
-
-          // This tuple tells the server if the server should operate on packets of traces
-          // and if so which packets to process
-          sc.sendChangeSpec(-1, "null", "null");
-          i++;
-        }
-
-        /*
-         * Step 2: Ask server for permission to run replay.
-         */
-        Log.ui("updateStatus", iteration + "/" + types.length + " " + S.ASK4PERMISSION);
-        // Now to move forward we ask for server permission
-        ArrayList<Integer> numOfTimeSlices = new ArrayList<>();
-        for (CombinedSideChannel sc : sideChannels) {
-          String[] permission = sc.ask4Permission();
-          String status = permission[0].trim();
-
-          Log.d("Replay", "Channel " + sc.getId() + ": permission[0]: " + status
-                  + " permission[1]: " + permission[1]);
-
-          String permissionError = permission[1].trim();
-          if (status.equals("0")) {
-            int errorCode;
-            // These are the different errors that server can report
-            switch (permissionError) {
-              case "1": //server cannot identify replay
-                Log.ui("ERR_PERM_REPLAY", S.ERROR_UNKNOWN_REPLAY);
-                errorCode = Consts.ERR_PERM_REPLAY;
-                break;
-              case "2": //only one replay can run at a time per IP
-                Log.ui("ERR_PERM_IP", S.ERROR_IP_CONNECTED);
-                errorCode = Consts.ERR_PERM_IP;
-                break;
-              case "3": //server CPU > 95%, disk > 95%, or bandwidth > 2000 Mbps
-                Log.ui("ERR_PERM_RES", S.ERROR_LOW_RESOURCES);
-                errorCode = Consts.ERR_PERM_RES;
-                break;
-              default:
-                Log.ui("ERR_PERM_UNK", S.ERROR_UNKNOWN);
-                errorCode = Consts.ERR_PERM_UNK;
-            }
-            return errorCode;
-          }
-
-          numOfTimeSlices.add(Integer.parseInt(permission[2].trim(), 10));
-        }
-
-        /*
-         * Step 3: Send noIperf.
-         */
-        for (CombinedSideChannel sc : sideChannels) {
-          sc.sendIperf(); // always send noIperf here
-        }
-
-        /*
-         * Step 4: Send device info.
-         */
-        for (CombinedSideChannel sc : sideChannels) {
-          sc.sendMobileStats(Config.sendMobileStats);
-        }
-
-        /*
-         * Step 5: Get port mapping from server.
-         */
-        /*
-         * Ask for port mapping from server. For some reason, port map
-         * info parsing was throwing error. so, I put while loop to do
-         * this until port mapping is parsed successfully.
-         */
-        Log.ui("updateStatus", iteration + "/" + types.length + " " + S.RECEIVE_SERVER_PORT_MAPPING);
-
-        ArrayList<HashMap<String, HashMap<String, HashMap<String, ServerInstance>>>> serverPortsMaps
-                = new ArrayList<>();
-        ArrayList<UDPReplayInfoBean> udpReplayInfoBeans = new ArrayList<>();
-        for (CombinedSideChannel sc : sideChannels) {
-                serverPortsMaps.add(sc.receivePortMappingNonBlock());
-          UDPReplayInfoBean udpReplayInfoBean = new UDPReplayInfoBean();
-          udpReplayInfoBean.setSenderCount(sc.receiveSenderCount());
-          udpReplayInfoBeans.add(udpReplayInfoBean);
-          Log.i("Replay", "Channel " + sc.getId() + ": Successfully received"
-                  + " serverPortsMap and senderCount!");
-        }
-
-        /*
-         * Step 6: Create TCP clients from CSPairs and UDP clients from client ports.
-         */
-        Log.ui("updateStatus", iteration + "/" + types.length + " " + S.CREATE_TCP_CLIENT);
-
-        //map of all cs pairs to TCP clients for a replay
-        ArrayList<HashMap<String, CTCPClient>> CSPairMappings = new ArrayList<>();
-
-        //create TCP clients
-        for (CombinedSideChannel sc : sideChannels) {
-          HashMap<String, CTCPClient> CSPairMapping = new HashMap<>();
-          for (String csp : appData.getTcpCSPs()) {
-            //get server IP and port
-            String destIP = csp.substring(csp.lastIndexOf('-') + 1,
-                    csp.lastIndexOf("."));
-            String destPort = csp.substring(csp.lastIndexOf('.') + 1);
-            //pad port to 5 digits with 0s; ex. 00443 or 00080
-            destPort = String.format("%5s", destPort).replace(' ', '0');
-
-            //get the server
-            ServerInstance instance;
-            try {
-              instance = Objects.requireNonNull(Objects.requireNonNull(
-                      serverPortsMaps.get(sc.getId()).get("tcp")).get(destIP)).get(destPort);
-              assert instance != null;
-            } catch (NullPointerException | AssertionError e) {
-              Log.e("Replay", "Cannot get instance", e);
-              Log.ui("ERR_CONN_INST", S.ERROR_NO_CONNECTION);
-              return Consts.ERR_CONN_INST;
-            }
-            if (instance.server.trim().equals(""))
-              // Use a setter instead probably
-              instance.server = servers.get(sc.getId()); // serverPortsMap.get(destPort);
-
-            //create the client
-            CTCPClient c = new CTCPClient(csp, instance.server,
-                    Integer.parseInt(instance.port),
-                    appData.getReplayName(), Config.publicIP, false);
-            CSPairMapping.put(csp, c);
-          }
-          CSPairMappings.add(CSPairMapping);
-          Log.i("Replay", "Channel " + sc.getId() + ": created clients from CSPairs");
-          Log.d("Replay", "Channel " + sc.getId() + ": Size of CSPairMapping is "
-                  + CSPairMapping.size());
-        }
-
-        Log.ui("updateStatus", iteration + "/" + types.length + " " + S.CREATE_UDP_CLIENT);
-
-        //map of all client ports to UDP clients for a replay
-        ArrayList<HashMap<String, CUDPClient>> udpPortMappings = new ArrayList<>();
-
-        //create client for each UDP port
-        for (CombinedSideChannel sc : sideChannels) {
-          HashMap<String, CUDPClient> udpPortMapping = new HashMap<>();
-          for (String originalClientPort : appData.getUdpClientPorts()) {
-            CUDPClient c = new CUDPClient(Config.publicIP);
-            udpPortMapping.put(originalClientPort, c);
-          }
-          udpPortMappings.add(udpPortMapping);
-          Log.i("Replay", "Channel " + sc.getId() + ": created clients from udpClientPorts");
-          Log.d("Replay", "Channel " + sc.getId() + ": Size of udpPortMapping is "
-                  + udpPortMapping.size());
-        }
-
-        /*
-         * Step 7: Start notifier for UDP.
-         */
-        Log.ui("updateStatus", iteration + "/" + types.length + " " + S.RUN_NOTF);
-
-        ArrayList<CombinedNotifierThread> notifiers = new ArrayList<>();
-        ArrayList<Thread> notfThreads = new ArrayList<>();
-        for (CombinedSideChannel sc : sideChannels) {
-          CombinedNotifierThread notifier = sc.notifierCreator(udpReplayInfoBeans.get(sc.getId()));
-          notifiers.add(notifier);
-          Thread notfThread = new Thread(notifier);
-          notfThread.start();
-          notfThreads.add(notfThread);
-        }
-
-        /*
-         * Step 8: Start receiver to log throughputs on a given interval.
-         */
-        Log.ui("updateStatus", iteration + "/" + types.length + " " + S.RUN_RECEIVER);
-
-        ArrayList<CombinedAnalyzerTask> analyzerTasks = new ArrayList<>();
-        ArrayList<Timer> analyzerTimers = new ArrayList<>();
-        ArrayList<CombinedReceiverThread> receivers = new ArrayList<>();
-        ArrayList<Thread> rThreads = new ArrayList<>();
-        for (CombinedSideChannel sc : sideChannels) {
-          CombinedAnalyzerTask analyzerTask = new CombinedAnalyzerTask(app.getTime() / 2.0,
-                  appData.isTCP(), numOfTimeSlices.get(sc.getId()), runPortTests); //throughput logged
-          Timer analyzerTimer = new Timer(true); //timer to log throughputs on interval
-          analyzerTimer.scheduleAtFixedRate(analyzerTask, 0, analyzerTask.getInterval());
-          analyzerTasks.add(analyzerTask);
-          analyzerTimers.add(analyzerTimer);
-
-          CombinedReceiverThread receiver = new CombinedReceiverThread(
-                  udpReplayInfoBeans.get(sc.getId()), jitterBeans.get(sc.getId()), analyzerTask); //receiver for udp
-          receivers.add(receiver);
-          Thread rThread = new Thread(receiver);
-          rThread.start();
-          rThreads.add(rThread);
-        }
-
-        /*
-         * Step 9: Send packets to server.
-         */
-        Log.ui("updateStatus", iteration + "/" + types.length + " " + S.RUN_SENDER);
-
-        CombinedQueue queue = new CombinedQueue(appData.getQ(), jitterBeans, analyzerTasks,
-                runPortTests ? Consts.REPLAY_PORT_TIMEOUT : Consts.REPLAY_APP_TIMEOUT);
-        long timeStarted = System.nanoTime(); //start time for sending
-        //send packets
-        ArrayList<HashMap<String, HashMap<String, ServerInstance>>> udpServerMappings = new ArrayList<>();
-        for (HashMap<String, HashMap<String, HashMap<String, ServerInstance>>> m : serverPortsMaps) {
-          udpServerMappings.add(m.get("udp"));
-        }
-
-        queue.run(CSPairMappings, udpPortMappings, udpReplayInfoBeans, udpServerMappings,
-                Config.timing, servers);
-
-        //all packets sent - stop logging and receiving
-        queue.stopTimers();
-        for (Timer t : analyzerTimers) {
-          t.cancel();
-        }
-        for (CombinedNotifierThread n : notifiers) {
-          n.doneSending = true;
-        }
-        for (Thread t : notfThreads) {
-          t.join();
-        }
-        for (CombinedReceiverThread r : receivers) {
-          r.keepRunning = false;
-        }
-        for (Thread t : rThreads) {
-          t.join();
-        }
-
-        /*
-         * Step 10: Tell server that replay is finished.
-         */
-        Log.ui("updateStatus", iteration + "/" + types.length + " " + S.SEND_DONE);
-
-        //time to send all packets
-        double duration = ((double) (System.nanoTime() - timeStarted)) / 1000000000;
-        for (CombinedSideChannel sc : sideChannels) {
-          sc.sendDone(duration);
-        }
-        Log.d("Replay", "replay finished using time " + duration + " s");
-
-        /*
-         * Step 11: Send throughputs and slices to server.
-         */
-        for (CombinedSideChannel sc : sideChannels) {
-          sc.sendTimeSlices(analyzerTasks.get(sc.getId()).getAverageThroughputsAndSlices());
-        }
-
-        //TODO: is this necessary?
-        //set avg of port 443, so it can be displayed if port being tested is blocked
-        if (runPortTests && channel.equalsIgnoreCase("random")) {
-          app.randomThroughput = analyzerTasks.get(0).getAvgThroughput();
-        }
-
-        // TODO find a better way to do this
-        // Send Result;No and wait for OK before moving forward
-        for (CombinedSideChannel sc : sideChannels) {
-          while (sc.getResult(Config.result)) {
-            Thread.sleep(500);
-          }
-        }
-
-        /*
-         * Step 12: Close side channel and TCP/UDP sockets.
-         */
-        // closing side channel socket
-        for (CombinedSideChannel sc : sideChannels) {
-          sc.closeSideChannelSocket();
-        }
-
-        //close TCP sockets
-        for (HashMap<String, CTCPClient> mapping : CSPairMappings) {
-          for (String csp : appData.getTcpCSPs()) {
-            CTCPClient c = mapping.get(csp);
-            if (c != null) {
-              c.close();
-            }
-          }
-        }
-        Log.i("CleanUp", "Closed CSPairs 1");
-
-        //close UDP sockets
-        for (HashMap<String, CUDPClient> mapping : udpPortMappings) {
-          for (String originalClientPort : appData.getUdpClientPorts()) {
-            CUDPClient c = mapping.get(originalClientPort);
-            if (c != null) {
-              c.close();
-            }
-          }
-        }
-
-        Log.i("CleanUp", "Closed CSPairs 2");
-        iteration++;
-      } catch (InterruptedException e) {
-        Log.w("Replay", "Replay interrupted!", e);
-      } catch (IOException e) { //something wrong with receiveKbytes() or constructor in CombinedSideChannel
-        Log.e("Replay", "Some IO issue with server", e);
-        Log.ui("ERR_CONN_IO_SERV", S.ERROR_NO_CONNECTION);
-        return Consts.ERR_CONN_IO_SERV;
+        numOfTimeSlices.add(Integer.parseInt(permission[2].trim(), 10));
       }
+
+      /*
+       * Step 3: Send noIperf.
+       */
+      for (CombinedSideChannel sc : sideChannels) {
+        sc.sendIperf(); // always send noIperf here
+      }
+
+      /*
+       * Step 4: Send device info.
+       */
+      for (CombinedSideChannel sc : sideChannels) {
+        sc.sendMobileStats(Config.sendMobileStats);
+      }
+
+      /*
+       * Step 5: Get port mapping from server.
+       */
+      /*
+       * Ask for port mapping from server. For some reason, port map
+       * info parsing was throwing error. so, I put while loop to do
+       * this until port mapping is parsed successfully.
+       */
+      Log.ui("updateStatus", S.RECEIVE_SERVER_PORT_MAPPING);
+
+      ArrayList<HashMap<String, HashMap<String, HashMap<String, ServerInstance>>>> serverPortsMaps
+              = new ArrayList<>();
+      ArrayList<UDPReplayInfoBean> udpReplayInfoBeans = new ArrayList<>();
+      for (CombinedSideChannel sc : sideChannels) {
+              serverPortsMaps.add(sc.receivePortMappingNonBlock());
+        UDPReplayInfoBean udpReplayInfoBean = new UDPReplayInfoBean();
+        udpReplayInfoBean.setSenderCount(sc.receiveSenderCount());
+        udpReplayInfoBeans.add(udpReplayInfoBean);
+        Log.i("Replay", "Channel " + sc.getId() + ": Successfully received"
+                + " serverPortsMap and senderCount!");
+      }
+
+      /*
+       * Step 6: Create TCP clients from CSPairs and UDP clients from client ports.
+       */
+      Log.ui("updateStatus", S.CREATE_TCP_CLIENT);
+
+      //map of all cs pairs to TCP clients for a replay
+      ArrayList<HashMap<String, CTCPClient>> CSPairMappings = new ArrayList<>();
+
+      //create TCP clients
+      for (CombinedSideChannel sc : sideChannels) {
+        HashMap<String, CTCPClient> CSPairMapping = new HashMap<>();
+        for (String csp : appData.getTcpCSPs()) {
+          //get server IP and port
+          String destIP = csp.substring(csp.lastIndexOf('-') + 1,
+                  csp.lastIndexOf("."));
+          String destPort = csp.substring(csp.lastIndexOf('.') + 1);
+          //pad port to 5 digits with 0s; ex. 00443 or 00080
+          destPort = String.format("%5s", destPort).replace(' ', '0');
+
+          //get the server
+          ServerInstance instance;
+          try {
+            instance = Objects.requireNonNull(Objects.requireNonNull(
+                    serverPortsMaps.get(sc.getId()).get("tcp")).get(destIP)).get(destPort);
+            assert instance != null;
+          } catch (NullPointerException | AssertionError e) {
+            Log.e("Replay", "Cannot get instance", e);
+            Log.ui("ERR_CONN_INST", S.ERROR_NO_CONNECTION);
+            return Consts.ERR_CONN_INST;
+          }
+          if (instance.server.trim().equals(""))
+            // Use a setter instead probably
+            instance.server = servers.get(sc.getId()); // serverPortsMap.get(destPort);
+
+          int srcPort = Integer.parseInt(csp.split("-")[0].split("\\.")[4]);
+
+          //create the client
+          CTCPClient c = new CTCPClient(csp, instance.server,
+                  Integer.parseInt(instance.port),
+                  appData.getReplayName(), Config.publicIP, false);
+          CSPairMapping.put(csp, c);
+        }
+        CSPairMappings.add(CSPairMapping);
+        Log.i("Replay", "Channel " + sc.getId() + ": created clients from CSPairs");
+        Log.d("Replay", "Channel " + sc.getId() + ": Size of CSPairMapping is "
+                + CSPairMapping.size());
+      }
+
+      Log.ui("updateStatus", S.CREATE_UDP_CLIENT);
+
+      //map of all client ports to UDP clients for a replay
+      ArrayList<HashMap<String, CUDPClient>> udpPortMappings = new ArrayList<>();
+
+      //create client for each UDP port
+      for (CombinedSideChannel sc : sideChannels) {
+        HashMap<String, CUDPClient> udpPortMapping = new HashMap<>();
+        for (String originalClientPort : appData.getUdpClientPorts()) {
+          CUDPClient c = new CUDPClient(Config.publicIP);
+          udpPortMapping.put(originalClientPort, c);
+        }
+        udpPortMappings.add(udpPortMapping);
+        Log.i("Replay", "Channel " + sc.getId() + ": created clients from udpClientPorts");
+        Log.d("Replay", "Channel " + sc.getId() + ": Size of udpPortMapping is "
+                + udpPortMapping.size());
+      }
+
+      /*
+       * Step 7: Start notifier for UDP.
+       */
+      Log.ui("updateStatus", iteration + "/" + types.length + " " + S.RUN_NOTF);
+
+      ArrayList<CombinedNotifierThread> notifiers = new ArrayList<>();
+      ArrayList<Thread> notfThreads = new ArrayList<>();
+      for (CombinedSideChannel sc : sideChannels) {
+        CombinedNotifierThread notifier = sc.notifierCreator(udpReplayInfoBeans.get(sc.getId()));
+        notifiers.add(notifier);
+        Thread notfThread = new Thread(notifier);
+        notfThread.start();
+        notfThreads.add(notfThread);
+      }
+
+      /*
+       * Step 8: Start receiver to log throughputs on a given interval.
+       */
+      Log.ui("updateStatus", S.RUN_RECEIVER);
+
+      ArrayList<CombinedAnalyzerTask> analyzerTasks = new ArrayList<>();
+      ArrayList<Timer> analyzerTimers = new ArrayList<>();
+      ArrayList<CombinedReceiverThread> receivers = new ArrayList<>();
+      ArrayList<Thread> rThreads = new ArrayList<>();
+      for (CombinedSideChannel sc : sideChannels) {
+        CombinedAnalyzerTask analyzerTask = new CombinedAnalyzerTask(app.getTime() / 2.0,
+                appData.isTCP(), numOfTimeSlices.get(sc.getId()), runPortTests); //throughput logged
+        Timer analyzerTimer = new Timer(true); //timer to log throughputs on interval
+        analyzerTimer.scheduleAtFixedRate(analyzerTask, 0, analyzerTask.getInterval());
+        analyzerTasks.add(analyzerTask);
+        analyzerTimers.add(analyzerTimer);
+
+        CombinedReceiverThread receiver = new CombinedReceiverThread(
+                udpReplayInfoBeans.get(sc.getId()), jitterBeans.get(sc.getId()), analyzerTask); //receiver for udp
+        receivers.add(receiver);
+        Thread rThread = new Thread(receiver);
+        rThread.start();
+        rThreads.add(rThread);
+      }
+
+      /*
+       * Step 9: Send packets to server.
+       */
+      Log.ui("updateStatus", S.RUN_SENDER);
+
+      CombinedQueue queue = new CombinedQueue(appData.getQ(), jitterBeans, analyzerTasks,
+              runPortTests ? Consts.REPLAY_PORT_TIMEOUT : Consts.REPLAY_APP_TIMEOUT);
+      long timeStarted = System.nanoTime(); //start time for sending
+      //send packets
+      ArrayList<HashMap<String, HashMap<String, ServerInstance>>> udpServerMappings = new ArrayList<>();
+      for (HashMap<String, HashMap<String, HashMap<String, ServerInstance>>> m : serverPortsMaps) {
+        udpServerMappings.add(m.get("udp"));
+      }
+
+      queue.run(CSPairMappings, udpPortMappings, udpReplayInfoBeans, udpServerMappings,
+              Config.timing, servers);
+
+      //all packets sent - stop logging and receiving
+      queue.stopTimers();
+      for (Timer t : analyzerTimers) {
+        t.cancel();
+      }
+      for (CombinedNotifierThread n : notifiers) {
+        n.doneSending = true;
+      }
+      for (Thread t : notfThreads) {
+        t.join();
+      }
+      for (CombinedReceiverThread r : receivers) {
+        r.keepRunning = false;
+      }
+      for (Thread t : rThreads) {
+        t.join();
+      }
+
+      /*
+       * Step 10: Tell server that replay is finished.
+       */
+      Log.ui("updateStatus", S.SEND_DONE);
+
+      //time to send all packets
+      double duration = ((double) (System.nanoTime() - timeStarted)) / 1000000000;
+      for (CombinedSideChannel sc : sideChannels) {
+        sc.sendDone(duration);
+      }
+      Log.d("Replay", "replay finished using time " + duration + " s");
+
+      /*
+       * Step 11: Send throughputs and slices to server.
+       */
+      for (CombinedSideChannel sc : sideChannels) {
+        sc.sendTimeSlices(analyzerTasks.get(sc.getId()).getAverageThroughputsAndSlices());
+      }
+
+      // TODO find a better way to do this
+      // Send Result;No and wait for OK before moving forward
+      for (CombinedSideChannel sc : sideChannels) {
+        while (sc.getResult(Config.result)) {
+          Thread.sleep(500);
+        }
+      }
+
+      /*
+       * Step 12: Close side channel and TCP/UDP sockets.
+       */
+      // closing side channel socket
+      for (CombinedSideChannel sc : sideChannels) {
+        sc.closeSideChannelSocket();
+      }
+
+      //close TCP sockets
+      for (HashMap<String, CTCPClient> mapping : CSPairMappings) {
+        for (String csp : appData.getTcpCSPs()) {
+          CTCPClient c = mapping.get(csp);
+          if (c != null) {
+            c.close();
+          }
+        }
+      }
+      Log.i("CleanUp", "Closed CSPairs 1");
+
+      //close UDP sockets
+      for (HashMap<String, CUDPClient> mapping : udpPortMappings) {
+        for (String originalClientPort : appData.getUdpClientPorts()) {
+          CUDPClient c = mapping.get(originalClientPort);
+          if (c != null) {
+            c.close();
+          }
+        }
+      }
+
+      Log.i("CleanUp", "Closed CSPairs 2");
+    } catch (InterruptedException e) {
+      Log.w("Replay", "Replay interrupted!", e);
+    } catch (IOException e) { //something wrong with receiveKbytes() or constructor in CombinedSideChannel
+      Log.e("Replay", "Some IO issue with server", e);
+      Log.ui("ERR_CONN_IO_SERV", S.ERROR_NO_CONNECTION);
+      return Consts.ERR_CONN_IO_SERV;
     }
 
     return 0;
