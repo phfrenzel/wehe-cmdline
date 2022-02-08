@@ -116,7 +116,7 @@ public class CombinedQueue {
           }
 
           try {
-            if (isUDP) { //UDP
+            if (RS.isUDP()) { //UDP
               // adrian: sending udp is done in queue thread, no need to start
               // new threads for udp since there is only one port
               Log.i("Replay", "Channel " + id + ": Sending udp packet " + i++ + "/"
