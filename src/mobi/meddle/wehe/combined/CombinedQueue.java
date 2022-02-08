@@ -186,7 +186,11 @@ public class CombinedQueue {
 
     try {
       for (Thread t : cThreadList) {
-        t.join(timeLeft * 1000L); //make sure thread isn't waiting to join forever
+        if (Consts.TIMEOUT_ENABLED) {
+            t.join(timeLeft * 1000L); //make sure thread isn't waiting to join forever
+        } else {
+            t.join();
+        }
       }
 
       Log.i("Queue", "Finished executing all Threads "
@@ -237,10 +241,15 @@ public class CombinedQueue {
       double expectedTime = timeOrigin + rs.getTimestamp() * 1000000000;
       if (System.nanoTime() < expectedTime) {
         int waitTime = (int) (Math.round(expectedTime - System.nanoTime()) / 1000000); //ms
-        timeLeft -= (waitTime / 1000);
-        if (timeLeft <= 0) {
-          timeLeft = 1;
+
+        if (Consts.TIMEOUT_ENABLED) {
+          timeLeft -= (waitTime / 1000);
+
+          if (timeLeft <= 0) {
+            timeLeft = 1;
+          }
         }
+
         // Log.d("Time", String.valueOf(waitTime));
         if (waitTime > 0) {
           try {
@@ -253,16 +262,20 @@ public class CombinedQueue {
     }
 
     cThread.start();
-    Timer t = new Timer();
-    t.schedule(new TimerTask() {
-      @Override
-      public void run() { //set timer to timeout the thread if max time has been reached for replay
-        clientThread.timeout();
-      }
-    }, timeLeft * 1000L);
+
+    if (Consts.TIMEOUT_ENABLED) {
+      Timer t = new Timer();
+      t.schedule(new TimerTask() {
+        @Override
+        public void run() { //set timer to timeout the thread if max time has been reached for replay
+          clientThread.timeout();
+        }
+      }, timeLeft * 1000L);
+      timers.add(t);
+    }
+
     ++threads;
     cThreadList.add(cThread);
-    timers.add(t);
   }
 
   /**
