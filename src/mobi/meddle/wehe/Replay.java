@@ -188,7 +188,7 @@ public class Replay {
     //replay will also pause for 2 seconds at that point in the replay
     //port tests try to run as fast as possible, so there is no timing for them
     Config.timing = !runPortTests;
-    String publicIP = getPublicIP("80"); //get user's IP address
+    String publicIP = getPublicIP("443"); //get user's IP address
     Config.publicIP = publicIP;
     Log.d("Replay", "public IP: " + publicIP);
     //If cannot connect to server, display an error and stop tests
