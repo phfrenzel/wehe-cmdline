@@ -50,7 +50,6 @@ public class CTCPClient {
       socket.setTcpNoDelay(true);
       socket.setReuseAddress(true);
       socket.setKeepAlive(true);
-      socket.setSoTimeout(30000);
       socket.connect(endPoint);
     } catch (Exception e) {
       Log.e("Client", "Error creating TCP socket", e);
