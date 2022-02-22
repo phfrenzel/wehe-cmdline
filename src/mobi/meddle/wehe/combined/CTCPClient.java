@@ -5,6 +5,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 
 import mobi.meddle.wehe.util.Log;
+import mobi.meddle.wehe.bean.Server;
 
 /**
  * A TCP connection to the server for a client-server pair. (Currently each replay has one
@@ -15,7 +16,7 @@ public class CTCPClient {
   private final String destIP;
   private final int destPort;
   final String replayName;
-  final String publicIP;
+  final Server publicIP;
   final boolean addHeader;
   Socket socket = null; //socket to connect to server
 
@@ -29,10 +30,18 @@ public class CTCPClient {
    * @param publicIP   IP address of the user's device
    * @param addHeader  true if header should be added to payload
    */
-  public CTCPClient(String cSPair, String destIP, int destPort,
-                    String replayName, String publicIP, boolean addHeader) {
+  public CTCPClient(String cSPair, Server destIP, int destPort,
+                    String replayName, Server publicIP, boolean addHeader) {
     this.CSPair = cSPair;
-    this.destIP = destIP;
+
+    String serverAddr = cSPair.split("-")[1];
+
+    if (serverAddr.contains(":")) {
+      this.destIP = destIP.getIpv6();
+    } else {
+      this.destIP = destIP.getIpv4();
+    }
+
     this.destPort = destPort;
     this.replayName = replayName;
     this.publicIP = publicIP;
@@ -52,7 +61,7 @@ public class CTCPClient {
       socket.setKeepAlive(true);
       socket.connect(endPoint);
     } catch (Exception e) {
-      Log.e("Client", "Error creating TCP socket", e);
+      Log.e("Client", "Error creating TCP socket: " + destIP, e);
     }
   }
 

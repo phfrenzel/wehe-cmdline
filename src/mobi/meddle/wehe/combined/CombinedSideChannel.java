@@ -16,6 +16,7 @@ import java.util.Locale;
 import javax.net.ssl.SSLSocketFactory;
 
 import mobi.meddle.wehe.bean.ServerInstance;
+import mobi.meddle.wehe.bean.Server;
 import mobi.meddle.wehe.bean.UDPReplayInfoBean;
 import mobi.meddle.wehe.util.Log;
 
@@ -161,6 +162,7 @@ public class CombinedSideChannel {
     byte[] data = receiveObject(objLen);
     String tempStr = new String(data);
     Log.d("receivePortMapping", "Channel " + id + ": length: " + tempStr.length());
+    Log.d("portMapping", tempStr);
     JSONObject jObject;
     try {
       jObject = new JSONObject(tempStr);
@@ -178,7 +180,7 @@ public class CombinedSideChannel {
           while (secondLevelKeys.hasNext()) {
             String key2 = secondLevelKeys.next();
             JSONArray pair = secondLevel.getJSONArray(key2);
-            tempHolder1.put(key2, new ServerInstance(String.valueOf(pair.get(0)),
+            tempHolder1.put(key2, new ServerInstance(new Server(String.valueOf(pair.get(0))),
                     String.valueOf(pair.get(1))));
           }
           tempHolder.put(key1, tempHolder1);

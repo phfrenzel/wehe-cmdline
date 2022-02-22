@@ -4,6 +4,7 @@ import mobi.meddle.wehe.constant.Consts;
 import mobi.meddle.wehe.constant.S;
 import mobi.meddle.wehe.util.Config;
 import mobi.meddle.wehe.util.Log;
+import mobi.meddle.wehe.bean.Server;
 
 /**
  * Main class for Wehe command line client.
@@ -139,10 +140,21 @@ public class Main {
           }
           break;
         case "-s": //url of server
-          Config.serverDisplay = arg.toLowerCase();
-          if (!Config.serverDisplay.matches("[a-z0-9.-]+")) {
-            printError("\"" + arg + "\" is not a valid server name. Can only contain alphanumerics, "
-                    + "period, and hyphen.");
+          if (arg.contains(",")) {
+            String[] parts = arg.split(",");
+
+            if (parts.length != 2) {
+              // TODO validate ipv4 + ipv6
+              printError("\"" + arg + "\" does not conform to \"[ipv4],[ipv6]\".");
+            }
+
+            Config.serverDisplay = new Server(parts[0], parts[1]);
+          } else {
+            if (!arg.toLowerCase().matches("[a-z0-9.-]+")) {
+              printError("\"" + arg + "\" is not a valid server name. Can only contain alphanumerics, "
+                      + "period, and hyphen.");
+            }
+            Config.serverDisplay = new Server(arg.toLowerCase());
           }
           break;
         case "-m": //url of mlab server api

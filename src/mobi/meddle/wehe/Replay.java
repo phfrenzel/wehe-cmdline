@@ -54,6 +54,8 @@ import mobi.meddle.wehe.bean.CombinedAppJSONInfoBean;
 import mobi.meddle.wehe.bean.JitterBean;
 import mobi.meddle.wehe.bean.RequestSet;
 import mobi.meddle.wehe.bean.ServerInstance;
+import mobi.meddle.wehe.bean.Server;
+import mobi.meddle.wehe.bean.Server;
 import mobi.meddle.wehe.bean.UDPReplayInfoBean;
 import mobi.meddle.wehe.combined.CTCPClient;
 import mobi.meddle.wehe.combined.CUDPClient;
@@ -73,12 +75,11 @@ import mobi.meddle.wehe.util.UtilsManager;
  */
 public class Replay {
   private final boolean runPortTests;
-  private boolean isIPv6; //true if user's public IP is v6, use to display in results
-  private final String serverDisplay; //server to display in the results
+  private final Server serverDisplay; //server to display in the results
   //---------------------------------------------------
   private CombinedAppJSONInfoBean appData;
   private ApplicationBean app;
-  private final ArrayList<String> servers = new ArrayList<>(); //server to run the replays to
+  private final ArrayList<Server> servers = new ArrayList<>(); //server to run the replays to
   private String metadataServer;
   private boolean doTest; //add a tail for testing data if true
   private final ArrayList<String> analyzerServerUrls = new ArrayList<>();
@@ -185,11 +186,11 @@ public class Replay {
     //replay will also pause for 2 seconds at that point in the replay
     //port tests try to run as fast as possible, so there is no timing for them
     Config.timing = !runPortTests;
-    String publicIP = getPublicIP("443"); //get user's IP address
+    Server publicIP = getPublicIP("443"); //get user's IP address
     Config.publicIP = publicIP;
     Log.d("Replay", "public IP: " + publicIP);
     //If cannot connect to server, display an error and stop tests
-    if (publicIP.equals("-1")) {
+    if (!publicIP.hasIp()) {
       cleanUp();
       Log.ui("ERR_CONN_IP", S.ERROR_NO_CONNECTION);
       return Consts.ERR_CONN_IP;
@@ -313,82 +314,26 @@ public class Replay {
    * @param metadataServer the host name of the metadata server to connect to
    * @return 0 if everything properly sets up; error code otherwise
    */
-  private int setupServersAndCertificates(String server, String metadataServer) {
+  private int setupServersAndCertificates(Server server, String metadataServer) {
     // We first resolve the IP of the server and then communicate with the server
     // Using IP only, because we have multiple server under same domain and we want
     // the client not to switch server during a test run
     //wehe4.meddle.mobi 90% returns 10.0.0.0 (use MLab), 10% legit IP (is Amazon)
 
-    //extreme hack to temporarily get around French DNS look up issue (currently 100% MLab)
-    if (server.equals("wehe4.meddle.mobi")) {
-      servers.add("10.0.0.0");
-      Log.d("Serverhack", "hacking wehe4");
-    } else {
-      servers.add(getServerIP(server));
-      if (servers.get(servers.size() - 1).equals("")) {
-        Log.ui("ERR_UNK_HOST", S.ERROR_UNKNOWN_HOST);
-        return Consts.ERR_UNK_HOST;
-      }
+    servers.add(server);
+    if (!servers.get(servers.size() - 1).hasIp()) {
+      Log.ui("ERR_UNK_HOST", S.ERROR_UNKNOWN_HOST);
+      return Consts.ERR_UNK_HOST;
     }
     // A hacky way to check server IP version
     boolean serverIPisV6 = false;
-    if (servers.get(0).contains(":")) {
+    if (servers.get(0).hasIpv6()) {
       serverIPisV6 = true;
     }
     Log.d("ServerIPVersion", servers.get(0) + (serverIPisV6 ? "IPV6" : "IPV4"));
-    //Connect to an MLab server if wehe4.meddle.mobi IP is 10.0.0.0 or if the client is using ipv6.
-    // Steps to connect: 1) GET
-    //request to MLab site to get MLab servers that can be connected to; 2) Parse first
-    //server to get MLab server URL and the authentication URL to connect to; 3) Connect to
-    //authentication URL with WebSocket; have connection open for entire test so SideChannel
-    //server doesn't disconnect (for security). URL valid for connection for 2 min after GET
-    //request made. 4) Connect to SideChannel with MLab machine URL. 5) Authentication URL
-    //has another 2 min timeout after connecting; every MLab test needs to do this process.
-    if (servers.get(0).equals("10.0.0.0") || serverIPisV6) {
-      servers.clear();
-      wsConns.clear();
-      try {
-        int numTries = 0; //tracks num tries before successful MLab connection
-        JSONObject mLabResp = sendRequest(Config.mLabServers, "GET", false, null, null);
-        JSONArray mLabServers = (JSONArray) mLabResp.get("results"); //get MLab servers list
-        WebSocketConnection wsConn = null;
-        for (int i = 0; wsConns.size() < Config.numServers && i < mLabServers.length(); i++) {
-          try {
-            numTries++;
-            Log.d("WebSocket", "Attempting to connect to WebSocket " + i + ": " + server);
 
-            JSONObject serverObj = (JSONObject) mLabServers.get(i); //get MLab server
-            server = "wehe-" + serverObj.getString("machine"); //SideChannel URL
-            String mLabURL = ((JSONObject) serverObj.get("urls"))
-                    .getString(Consts.MLAB_WEB_SOCKET_SERVER_KEY); //authentication URL
-            wsConn = new WebSocketConnection(i, new URI(mLabURL)); //connect to WebSocket
-
-            //code below runs only if successful connection to WebSocket
-            Log.d("WebSocket", "New WebSocket connectivity check: "
-                    + (wsConn.isOpen() ? "CONNECTED" : "CLOSED") + " TO " + server);
-            wsConns.add(wsConn);
-            servers.add(getServerIP(server));
-            numMLab.add(numTries);
-            numTries = 0;
-          } catch (URISyntaxException | JSONException | DeploymentException | NullPointerException
-                  | InterruptedException e) {
-            if (wsConn != null && wsConn.isOpen()) {
-              wsConn.close();
-            }
-            Log.e("WebSocket", "Failed to connect to WebSocket: " + server, e);
-          }
-        }
-      } catch (JSONException | NullPointerException e) {
-        Log.e("WebSocket", "Can't retrieve M-Lab servers", e);
-      }
-      if (wsConns.size() < Config.numServers) {
-        Log.ui("ERR_CONN_WS", S.ERROR_NO_WS);
-        return Consts.ERR_CONN_WS;
-      }
-    }
-
-    for (String srvr : servers) {
-      if (srvr.equals("")) { //check to make sure IP was returned by getServerIP
+    for (Server srvr : servers) {
+      if (!srvr.hasIp()) { //check to make sure IP was returned by getServerIP
         Log.ui("ERR_UNK_HOST", S.ERROR_UNKNOWN_HOST);
         return Consts.ERR_UNK_HOST;
       }
@@ -398,15 +343,8 @@ public class Replay {
       return Consts.ERR_CERT;
     }
 
-    //get URL for analysis and results
-    int port = Config.result_port; //get port to send tests through
-    for (String srvr : servers) {
-      analyzerServerUrls.add("https://" + srvr + ":" + port + "/Results");
-      Log.d("Result Channel", "path: " + srvr + " port: " + port);
-    }
-
     if (metadataServer != null) {
-      this.metadataServer = getServerIP(metadataServer);
+      this.metadataServer = metadataServer;
       if (this.metadataServer.equals("")) { //get IP and certificates for metadata server
         Log.ui("ERR_UNK_META_HOST", S.ERROR_UNKNOWN_META_HOST);
         return Consts.ERR_UNK_META_HOST;
@@ -416,41 +354,6 @@ public class Replay {
       }
     }
     return Consts.SUCCESS;
-  }
-
-  /**
-   * Does a DNS lookup on a hostname.
-   *
-   * @param server the hostname to be resolved
-   * @return the IP of the host; empty string if there is an error doing so.
-   */
-  private String getServerIP(String server) {
-    Log.d("getServerIP", "Server hostname: " + server);
-    InetAddress address;
-    for (int i = 0; i < 5; i++) { //5 attempts to lookup the IP
-      try {
-        server = InetAddress.getByName(server).getHostAddress(); //DNS lookup
-        address = InetAddress.getByName(server);
-        if (address instanceof Inet4Address) {
-          return server;
-        }
-        if (address instanceof Inet6Address) {
-          return "[" + server + "]";
-        }
-      } catch (UnknownHostException e) {
-        if (i == 4) {
-          Log.e("getServerIP", "Failed to get IP of server", e);
-        } else {
-          Log.w("getServerIP", "Failed to get IP of server, trying again");
-        }
-        try {
-          Thread.sleep(1000);
-        } catch (InterruptedException ex) {
-          Log.w("getServerIP", "Sleep interrupted", ex);
-        }
-      }
-    }
-    return "";
   }
 
   /**
@@ -495,50 +398,50 @@ public class Replay {
     return true;
   }
 
+  private String request(URL url) throws IOException, UnknownHostException {
+    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+    conn.setConnectTimeout(3000);
+    conn.setReadTimeout(5000);
+    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+    StringBuilder buffer = new StringBuilder();
+    String input;
+
+    while ((input = in.readLine()) != null) { //read IP address
+    buffer.append(input);
+    }
+    in.close();
+    conn.disconnect();
+    return buffer.toString();
+  }
+
   /**
    * Get IP of user's device.
    *
    * @param port port to run replays
-   * @return user's public IP or -1 if cannot connect to the server
+   * @return user's public IPs or -1 if cannot connect to the server
    */
-  private String getPublicIP(String port) {
-    String publicIP = "127.0.0.1";
+  private Server getPublicIP(String port) {
+    Server publicIP = new Server("", "");
 
-    if (servers.size() != 0 && !servers.get(0).equals("127.0.0.1")) {
-      String url = "http://" + servers.get(0) + ":" + port + "/WHATSMYIPMAN";
-      Log.d("getPublicIP", "url: " + url);
+    if (servers.size() != 0 && !servers.get(0).getIpv4().equals("127.0.0.1")) {
+      String url4 = "http://" + servers.get(0).getIpv4() + ":" + port + "/WHATSMYIPMAN";
+      String url6 = "http://[" + servers.get(0).getIpv6() + "]:" + port + "/WHATSMYIPMAN";
+      Log.d("getPublicIP", "url4: " + url4);
 
       int numFails = 0;
-      while (publicIP.equals("127.0.0.1")) {
+      while (!publicIP.hasIpv4()) {
         try {
-          URL u = new URL(url);
-          //go to server
-          HttpURLConnection conn = (HttpURLConnection) u.openConnection();
-          conn.setConnectTimeout(3000);
-          conn.setReadTimeout(5000);
-          BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-          StringBuilder buffer = new StringBuilder();
-          String input;
+          Server ipv4 = new Server(request(new URL(url4)));
 
-          while ((input = in.readLine()) != null) { //read IP address
-            buffer.append(input);
-          }
-          in.close();
-          conn.disconnect();
-          publicIP = buffer.toString();
-          InetAddress address = InetAddress.getByName(publicIP);
-          if (!(address instanceof Inet4Address) && !(address instanceof Inet6Address)) {
-            Log.e("getPublicIP", "wrong format of public IP: " + publicIP);
+          if (!ipv4.hasIpv4()) {
+            Log.e("getPublicIP", "wrong format of public IP: ipv4: " + ipv4);
             throw new UnknownHostException();
           }
-          isIPv6 = address instanceof Inet6Address;
-          if (publicIP.equals("")) {
-            publicIP = "-1";
-          }
+
+          publicIP.setIpv4(ipv4.getIpv4());
           Log.d("getPublicIP", "public IP: " + publicIP);
         } catch (UnknownHostException e) {
-          Log.w("getPublicIP", "failed to get public IP!", e);
-          publicIP = "127.0.0.1";
+          Log.w("getPublicIP", "failed to get public IPv4!", e);
           break;
         } catch (IOException e) {
           Log.w("getPublicIP", "Can't connect to server");
@@ -548,14 +451,44 @@ public class Replay {
             Log.w("getPublicIP", "Sleep interrupted", e1);
           }
           if (++numFails == 5) { //Cannot connect to server after 5 tries
-            Log.w("getPublicIP", "Returning -1", e);
-            publicIP = "-1";
-            break;
+            Log.w("getPublicIP", "Cannot connect to server after 5 tries", e);
+            return new Server("", "");
+          }
+        }
+      }
+
+      Log.d("getPublicIP", "url6: " + url6);
+      numFails = 0;
+      while (!publicIP.hasIpv6()) {
+        try {
+          Server ipv6 = new Server(request(new URL(url6)));
+
+          if (!ipv6.hasIpv6()) {
+            Log.e("getPublicIP", "wrong format of public IPv6: " + ipv6);
+            throw new UnknownHostException();
+          }
+
+          publicIP.setIpv6(ipv6.getIpv6());
+          Log.d("getPublicIP", "public IP: " + publicIP);
+        } catch (UnknownHostException e) {
+          Log.w("getPublicIP", "failed to get public IP!", e);
+          break;
+        } catch (IOException e) {
+          Log.w("getPublicIP", "Can't connect to server");
+          try {
+            Thread.sleep(1000);
+          } catch (InterruptedException e1) {
+            Log.w("getPublicIP", "Sleep interrupted", e1);
+          }
+          if (++numFails == 5) { //Cannot connect to server after 5 tries
+            Log.w("getPublicIP", "Cannot connect to server after 5 tries", e);
+            return publicIP;
           }
         }
       }
     } else {
       Log.w("getPublicIP", "Client IP is not available");
+      publicIP = new Server("", "");
     }
     return publicIP;
   }
@@ -845,9 +778,9 @@ public class Replay {
       int id = 0;
       //each concurrent test gets its own sidechannel because each concurrent test is run on
       //a different server
-      for (String server : servers) {
+      for (Server server : servers) {
         sideChannels.add(new CombinedSideChannel(id, sslSocketFactory,
-                server, sideChannelPort, appData.isTCP()));
+                server.getIpv4(), sideChannelPort, appData.isTCP()));
         id++;
       }
 
@@ -858,13 +791,13 @@ public class Replay {
 
       //Get user's IP address
       String replayPort = "80";
-      String ipThroughProxy = "127.0.0.1";
+      Server ipThroughProxy = new Server("127.0.0.1", "");
       if (appData.isTCP()) {
         for (String csp : appData.getTcpCSPs()) {
           replayPort = csp.substring(csp.lastIndexOf('.') + 1);
         }
         ipThroughProxy = getPublicIP(replayPort);
-        if (ipThroughProxy.equals("-1")) { //port is blocked; move on to next replay
+        if (!ipThroughProxy.hasIp()) { //port is blocked; move on to next replay
           portBlocked = true;
           return 0;
         }
@@ -881,6 +814,7 @@ public class Replay {
        * Step 1: Tell server about the replay that is about to happen.
        */
       int i = 0;
+      String realIps = ipThroughProxy.getIpv4() + "|" + ipThroughProxy.getIpv6(); // TODO
       for (CombinedSideChannel sc : sideChannels) {
         // This is group of values that is used to track traces on server
         // Youtube;False;0;DiffDetector;0;129.10.9.93;1.0
@@ -889,7 +823,7 @@ public class Replay {
         sc.declareID(appData.getReplayName(), "True",
                 randomID, String.valueOf(historyCount), String.valueOf(testId),
                 doTest ? Config.extraString + "-Test" : Config.extraString,
-                ipThroughProxy, Consts.VERSION_NAME);
+                realIps, Consts.VERSION_NAME);
 
         // This tuple tells the server if the server should operate on packets of traces
         // and if so which packets to process
@@ -988,6 +922,11 @@ public class Replay {
           //get server IP and port
           String destIP = csp.substring(csp.lastIndexOf('-') + 1,
                   csp.lastIndexOf("."));
+
+          if (!Config.publicIP.hasIpv6() && destIP.contains(":")) {
+              continue;
+          }
+
           String destPort = csp.substring(csp.lastIndexOf('.') + 1);
           //pad port to 5 digits with 0s; ex. 00443 or 00080
           destPort = String.format("%5s", destPort).replace(' ', '0');
@@ -1003,11 +942,10 @@ public class Replay {
             Log.ui("ERR_CONN_INST", S.ERROR_NO_CONNECTION);
             return Consts.ERR_CONN_INST;
           }
-          if (instance.server.trim().equals(""))
+          if (!instance.server.hasIp()) {
             // Use a setter instead probably
             instance.server = servers.get(sc.getId()); // serverPortsMap.get(destPort);
-
-          int srcPort = Integer.parseInt(csp.split("-")[0].split("\\.")[4]);
+          }
 
           //create the client
           CTCPClient c = new CTCPClient(csp, instance.server,
@@ -1042,7 +980,7 @@ public class Replay {
       /*
        * Step 7: Start notifier for UDP.
        */
-      Log.ui("updateStatus", iteration + "/" + types.length + " " + S.RUN_NOTF);
+      Log.ui("updateStatus", S.RUN_NOTF);
 
       ArrayList<CombinedNotifierThread> notifiers = new ArrayList<>();
       ArrayList<Thread> notfThreads = new ArrayList<>();

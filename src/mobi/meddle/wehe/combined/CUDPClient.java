@@ -9,6 +9,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 
 import mobi.meddle.wehe.bean.ServerInstance;
+import mobi.meddle.wehe.bean.Server;
 import mobi.meddle.wehe.util.Log;
 
 /**
@@ -16,7 +17,7 @@ import mobi.meddle.wehe.util.Log;
  */
 public class CUDPClient {
   DatagramChannel channel = null;
-  private final String publicIP;
+  private final Server publicIP;
   private Selector selector;
 
   /**
@@ -24,7 +25,7 @@ public class CUDPClient {
    *
    * @param publicIP the user's public IP address
    */
-  public CUDPClient(String publicIP) {
+  public CUDPClient(Server publicIP) {
     this.publicIP = publicIP;
     try {
       this.selector = Selector.open();
@@ -40,7 +41,7 @@ public class CUDPClient {
   void createSocket() {
     try {
       byte[] buffer = "".getBytes();
-      InetSocketAddress endPoint = new InetSocketAddress(publicIP, 100);
+      InetSocketAddress endPoint = new InetSocketAddress(publicIP.getIpv4(), 100);
       DatagramPacket packet = new DatagramPacket(buffer, buffer.length, endPoint);
       channel = DatagramChannel.open();
       channel.socket().send(packet);
@@ -61,7 +62,7 @@ public class CUDPClient {
    * @param payload  the payload to send to the server
    * @param instance the server to send the payload to
    */
-  void sendUDPPacket(byte[] payload, ServerInstance instance) {
+  void sendUDPPacket(byte[] payload, String address, String port) {
     // Log.d("sendUDP", "server IP: " + instance.server + " port: " + instance.port);
     // only try to send when buffer is available
     // TODO: is it possible for this to block forever?
@@ -70,7 +71,7 @@ public class CUDPClient {
       selector.select();
       // send the packet
       this.channel.send(ByteBuffer.wrap(payload), new InetSocketAddress(
-              instance.server, Integer.parseInt(instance.port)));
+              address, Integer.parseInt(port)));
     } catch (IOException e) {
       Log.e("UDPClient", "Error sending UDP packet", e);
     }

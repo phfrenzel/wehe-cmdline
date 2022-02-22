@@ -11,9 +11,11 @@ import java.util.concurrent.Semaphore;
 import mobi.meddle.wehe.bean.JitterBean;
 import mobi.meddle.wehe.bean.RequestSet;
 import mobi.meddle.wehe.bean.ServerInstance;
+import mobi.meddle.wehe.bean.Server;
 import mobi.meddle.wehe.bean.UDPReplayInfoBean;
 import mobi.meddle.wehe.constant.Consts;
 import mobi.meddle.wehe.util.Log;
+import mobi.meddle.wehe.util.Config;
 
 /**
  * This loads and de-serializes all necessary objects. Complicated. I'll have to think what I did
@@ -78,7 +80,7 @@ public class CombinedQueue {
                   ArrayList<HashMap<String, CUDPClient>> udpPortMappings,
                   ArrayList<UDPReplayInfoBean> udpReplayInfoBeans,
                   ArrayList<HashMap<String, HashMap<String, ServerInstance>>> udpServerMappings,
-                  Boolean timing, ArrayList<String> servers) {
+                  Boolean timing, ArrayList<Server> servers) {
     long curTime = System.nanoTime();
     this.timeOrigin = System.nanoTime();
     for (JitterBean ignored : jitterBeans) {
@@ -107,6 +109,10 @@ public class CombinedQueue {
             break;
           }
           currentTime = (double) (System.nanoTime() - timeOrigin) / 1000000000.0; //nano sec to sec
+
+          if (!Config.publicIP.hasIpv6() && RS.getc_s_pair().contains(":")) {
+              continue;
+          }
 
           //check for timeout sending packets
           if (Consts.TIMEOUT_ENABLED && currentTime > timeout) {
@@ -296,7 +302,7 @@ public class CombinedQueue {
   private void nextUDP(int id, RequestSet rs, HashMap<String, CUDPClient> udpPortMapping,
                        UDPReplayInfoBean udpReplayInfoBean,
                        HashMap<String, HashMap<String, ServerInstance>> udpServerMapping,
-                       Boolean timing, String server) throws InterruptedException {
+                       Boolean timing, Server server) throws InterruptedException {
     //get the client/server IP and port info from the cs pair
     String c_s_pair = rs.getc_s_pair();
     String client_ip_port = c_s_pair.split("-")[0];
@@ -304,13 +310,23 @@ public class CombinedQueue {
     String clientPort = client_ip_port.substring(client_ip_port.lastIndexOf(".") + 1);
     String dstPort = server_ip_port.substring(server_ip_port.lastIndexOf(".") + 1);
     String dstIP = server_ip_port.substring(0, server_ip_port.lastIndexOf("."));
+
     Log.d("nextUDP", "dstIP: " + dstIP + " dstPort: " + dstPort);
     //get the server
     ServerInstance destAddr = Objects.requireNonNull(udpServerMapping.get(dstIP)).get(dstPort);
 
     assert destAddr != null;
-    if (destAddr.server.trim().equals("")) {
+    if (!destAddr.server.hasIp()) {
       destAddr.server = server;
+    }
+
+    String dest;
+
+    if (dstIP.contains(":")) {
+      // TODO handle error if ipv6 == null
+      dest = destAddr.server.getIpv6();
+    } else {
+      dest = destAddr.server.getIpv4();
     }
 
     //get the correct connection to the server
@@ -350,7 +366,7 @@ public class CombinedQueue {
 
     // adrian: send packet
     try {
-      client.sendUDPPacket(rs.getPayload(), destAddr);
+      client.sendUDPPacket(rs.getPayload(), dest, destAddr.port);
     } catch (Exception e) {
       Log.w("sendUDP", "something bad happened!", e);
       ABORT = true;

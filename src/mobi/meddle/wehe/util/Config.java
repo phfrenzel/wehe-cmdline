@@ -1,5 +1,6 @@
 package mobi.meddle.wehe.util;
 
+import mobi.meddle.wehe.bean.Server;
 import mobi.meddle.wehe.constant.Consts;
 
 /**
@@ -7,7 +8,7 @@ import mobi.meddle.wehe.constant.Consts;
  */
 public class Config {
   public static String appName;
-  public static String serverDisplay;
+  public static Server serverDisplay;
   public static String mLabServers;
   public static int numServers = 1;
   public static boolean confirmationReplays = true;
@@ -17,7 +18,7 @@ public class Config {
   public static int logLev = 0;
 
   public static boolean timing;
-  public static String publicIP;
+  public static Server publicIP;
   public static int result_port = 56566;
   public static int combined_sidechannel_port = 55556;
   public static String extraString = "DiffDetector";
