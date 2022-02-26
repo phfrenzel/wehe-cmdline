@@ -78,8 +78,7 @@ public class Main {
    * @return true if option is valid; false otherwise
    */
   private static boolean isValidArg(String arg) {
-    return arg.equals("-n") || arg.equals("-s") || arg.equals("-m") || arg.equals("-u")
-            || arg.equals("-c") || arg.equals("-a") || arg.equals("-k") || arg.equals("-t")
+    return arg.equals("-n") || arg.equals("-s") || arg.equals("-t")
             || arg.equals("-r") || arg.equals("-l");
   }
 
@@ -115,12 +114,11 @@ public class Main {
       if (!isValidArg(opt)) { //get option
         printError("The \"" + opt + "\" option is not a valid.");
       }
-      if (!opt.equals("-c")) {
-        if (i == args.length - 1) { //option (except for -c) cannot be the last arg
-          printError("The \"" + opt + "\" option requires an argument.");
-        } else {
-          arg = args[++i]; //get the argument for the option
-        }
+
+      if (i == args.length - 1) { //option (except for -c) cannot be the last arg
+        printError("The \"" + opt + "\" option requires an argument.");
+      } else {
+        arg = args[++i]; //get the argument for the option
       }
 
       switch (opt) {
@@ -155,46 +153,6 @@ public class Main {
                       + "period, and hyphen.");
             }
             Config.serverDisplay = new Server(arg.toLowerCase());
-          }
-          break;
-        case "-m": //url of mlab server api
-          Config.mLabServers = arg;
-          break;
-        case "-u": //number of mlab servers to use (must be between 1 and 4 inclusive)
-          try {
-            int numServers = Integer.parseInt(arg);
-            if (numServers >= 1 && numServers <= 4) {
-              Config.numServers = numServers;
-            } else {
-              printError("Number of servers must be between 1 and 4 inclusive.");
-            }
-          } catch (NumberFormatException e) {
-            printError("Number of servers must be between 1 and 4 inclusive.");
-          }
-          break;
-        case "-c": //turn off confirmation replay
-          Config.confirmationReplays = false;
-          break;
-        case "-a": //set area threshold
-          Config.useDefaultThresholds = false;
-          try {
-            Config.a_threshold = Integer.parseInt(arg);
-            if (Config.a_threshold < 0 || Config.a_threshold > 100) {
-              printError("Area threshold must be an integer between 0 and 100.");
-            }
-          } catch (NumberFormatException e) {
-            printError("\"" + arg + "\" is not an integer.");
-          }
-          break;
-        case "-k": //set ks2p-value threshold
-          Config.useDefaultThresholds = false;
-          try {
-            Config.ks2pvalue_threshold = Integer.parseInt(arg);
-            if (Config.ks2pvalue_threshold < 0 || Config.ks2pvalue_threshold > 100) {
-              printError("ks2pvalue must be an integer between 0 and 100.");
-            }
-          } catch (NumberFormatException e) {
-            printError("\"" + arg + "\" is not an integer.");
           }
           break;
         case "-t": //set root directory containing the tests and test info
