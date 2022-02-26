@@ -10,13 +10,29 @@ import mobi.meddle.wehe.util.Log;
  */
 public class Main {
 
-  private static final String[] APP_IDS = {"applemusic", "dailymotion", "deezer", "disneyplus",
-          "facebookvideo", "meet", "hulu", "teams", "nbcsports", "netflix", "molotovtv", "mycanal",
-          "ocs", "amazon", "salto", "sfrplay", "skype", "spotify", "twitch", "twittervideo", "vimeo",
-          "webex", "whatsapp", "youtube", "zoom", "port80s", "port81s", "port465s", "port853s", "port993s",
-          "port995s", "port1194s", "port1701s", "port5061s", "port6881s", "port8080s", "port8443s",
-          "port80l", "port81l", "port465l", "port853l", "port993l", "port995l", "port1194l",
-          "port1701l", "port5061l", "port6881l", "port8080l", "port8443l"}; //for -n argument
+  private static final String[] APP_IDS = {
+      "snapchat_spotlight_1",
+      "snapchat_snap_video_1",
+      "fm4_flow_1",
+      "fm4_radio_1",
+      "iphone_idle",
+      "snapchat_map_1",
+      "whatsapp_outgoing_call_1",
+      "fm4_misc_2",
+      "snapchat_misc",
+      "whatsapp_incoming_video_1",
+      "whatsapp_misc",
+      "whatsapp_outgoing_video_1",
+      "whatsapp_incoming_call_1",
+      "fm4_programme_1",
+      "snapchat_shutdown",
+      "fm4_stories_scroll_1",
+      "fm4web_misc_1",
+      "fm4_misc_1",
+      "fm4web_misc_2",
+      "fm4_favorite_1",
+      "snapchat_chat_1",
+  }; //for -n argument
   private static String logLevel = "UI";
 
   /**
