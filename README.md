@@ -36,18 +36,6 @@ Example: `java -jar wehe-cmdline.jar -n applemusic -c -r results/ -l info`
 
 `-s SERV_NAME` - The hostname or IP of server to run the tests. Default: `wehe4.meddle.mobi`.
 
-`-m MLAB_API` - The URL of the API to retrieve access envelopes to run tests on M-Lab servers. 
-Default: `https://locate.measurementlab.net/v2/nearest/wehe/replay`.
-
-`-u MUM_SRVR` - The number of servers to run the test concurrently. This feature is available only 
-with M-Lab servers. Must be integer between 1 and 4 inclusive. Default: `1`.
-
-`-c` - Turn off confirmation replays (if test is inconclusive, it will automatically rerun by default).
-
-`-a A_THRESH` - The area threshold percentage for determining differentiation. Default: `50`.
-
-`-k KS2P_VAL` - The KS2P-value threshold percentage for determining differentiation. Default: `1`.
-
 `-t RESR_ROOT` - The resources root containing `apps_list.json` and the tests. No need to change 
 this if using the jar or if you don't move the `res/` directory. Default: `res/`.
 
@@ -64,35 +52,28 @@ when running the Android app) will be printed to the console.
 
 **Tests**
 
-| App Name        | Test Name (`-n` arg) | Port Name             | Test Name (`-n` arg) |
-|-----------------|----------------------|-----------------------|----------------------|
-| Apple Music     | `applemusic`         | 80 HTTP small         | `port80s`            |
-| Dailymotion     | `dailymotion`        | 81 HTTP small         | `port81s`            |
-| Deezer          | `deezer`             | 465 SMTPS small       | `port465s`           |
-| Disney+         | `disneyplus`         | 853 DoT small         | `port853s`           |
-| Facebook Video  | `facebookvideo`      | 993 IMAPS small       | `port993s`           |
-| Google Meet     | `meet`               | 995 POP3S small       | `port995s`           |
-| Hulu            | `hulu`               | 1194 OpenVPN small    | `port1194s`          |
-| Microsoft Teams | `teams`              | 1701 L2TP small       | `port1701s`          |
-| NBC Sports      | `nbcsports`          | 5061 SIPS small       | `port5061s`          |
-| Netflix         | `netflix`            | 6881 BitTorrent small | `port6881s`          |
-| Molotov TV      | `molotovtv`          | 8080 SpeedTest small  | `port8080s`          |
-| myCANAL         | `mycanal`            | 8443 SpeedTest small  | `port8443s`          |
-| OCS             | `ocs`                | 80 HTTPS large        | `port80l`            |
-| Prime Video     | `amazon`             | 81 HTTP large         | `port81l`            |
-| Salto           | `salto`              | 465 SMTPS large       | `port465l`           |
-| SFR Play        | `sfrplay`            | 853 DoT large         | `port853l`           |
-| Skype           | `skype`              | 993 IMAPS large       | `port993l`           |
-| Spotify         | `spotify`            | 995 POP3S large       | `port995l`           |
-| Twitch          | `twitch`             | 1194 OpenVPN large    | `port1194l`          |
-| Twitter Video   | `twittervideo`       | 1701 L2TP large       | `port1701l`          |
-| Vimeo           | `vimeo`              | 5061 SIPS large       | `port5061l`          |
-| Webex           | `webex`              | 6881 BitTorrent large | `port6881l`          |
-| WhatsApp        | `whatsapp`           | 8080 SpeedTest large  | `port8080l`          |
-| YouTube         | `youtube`            | 8443 SpeedTest large  | `port8443l`          |
-| Zoom            | `zoom`               |                       |                      |
-
-Note: Small port tests are 10 MB per replay, while large port tests are 50 MB per replay.
+| Test Names (`-n` arg)        |
+|------------------------------|
+| fm4\_favorite\_1             |
+| fm4\_flow\_1                 |
+| fm4\_misc\_1                 |
+| fm4\_misc\_2                 |
+| fm4\_programme\_1            |
+| fm4\_radio\_1                |
+| fm4\_stories\_scroll\_1      |
+| fm4web\_misc\_1              |
+| fm4web\_misc\_2              |
+| iphone\_idle                 |
+| snapchat\_chat\_1            |
+| snapchat\_map\_1             |
+| snapchat\_misc               |
+| snapchat\_snap\_video\_1     |
+| snapchat\_spotlight\_1       |
+| whatsapp\_incoming\_call\_1  |
+| whatsapp\_incoming\_video\_1 |
+| whatsapp\_misc               |
+| whatsapp\_outgoing\_call\_1  |
+| whatsapp\_outgoing\_video\_1 |
 
 ### Output
 
