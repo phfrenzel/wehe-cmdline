@@ -48,7 +48,6 @@ import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManagerFactory;
-import javax.websocket.DeploymentException;
 
 import mobi.meddle.wehe.bean.ApplicationBean;
 import mobi.meddle.wehe.bean.CombinedAppJSONInfoBean;
@@ -63,7 +62,6 @@ import mobi.meddle.wehe.combined.CombinedNotifierThread;
 import mobi.meddle.wehe.combined.CombinedQueue;
 import mobi.meddle.wehe.combined.CombinedReceiverThread;
 import mobi.meddle.wehe.combined.CombinedSideChannel;
-import mobi.meddle.wehe.combined.WebSocketConnection;
 import mobi.meddle.wehe.constant.Consts;
 import mobi.meddle.wehe.constant.S;
 import mobi.meddle.wehe.util.Config;
@@ -82,7 +80,6 @@ public class Replay {
   private ApplicationBean app;
   private final ArrayList<String> servers = new ArrayList<>(); //server to run the replays to
   private String metadataServer;
-  private final ArrayList<WebSocketConnection> wsConns = new ArrayList<>();
   private boolean doTest; //add a tail for testing data if true
   private final ArrayList<String> analyzerServerUrls = new ArrayList<>();
   //true if confirmation replay should run if the first replay has differentiation
@@ -215,11 +212,6 @@ public class Replay {
    * Close connections and cancel timers before exiting.
    */
   private void cleanUp() {
-    for (WebSocketConnection wsConn : wsConns) {
-      if (wsConn != null && wsConn.isOpen()) {
-        wsConn.close();
-      }
-    }
     for (Timer t : timers) {
       t.cancel();
     }
@@ -833,10 +825,6 @@ public class Replay {
    */
   private int runTest() {
     boolean portBlocked = false;
-    for (WebSocketConnection w : wsConns) { //if using MLab, check that still connected
-      Log.d("WebSocket", "Before running test WebSocket (id: " + w.getId() + ") connectivity check: "
-              + (w.isOpen() ? "CONNECTED" : "CLOSED"));
-    }
 
     /*
      * Step 0: Initialize variables.

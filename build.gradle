@@ -17,8 +17,6 @@ repositories {
 }
 
 dependencies {
-    // https://mvnrepository.com/artifact/org.glassfish.tyrus.bundles/tyrus-standalone-client
-    implementation 'org.glassfish.tyrus.bundles:tyrus-standalone-client:1.17'
     // https://mvnrepository.com/artifact/org.json/json
     implementation 'org.json:json:20211205'
 }
