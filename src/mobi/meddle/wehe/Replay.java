@@ -950,7 +950,7 @@ public class Replay {
           //create the client
           CTCPClient c = new CTCPClient(csp, instance.server,
                   Integer.parseInt(instance.port),
-                  appData.getReplayName(), Config.publicIP, false);
+                  appData.getReplayName(), Config.publicIP);
           CSPairMapping.put(csp, c);
         }
         CSPairMappings.add(CSPairMapping);

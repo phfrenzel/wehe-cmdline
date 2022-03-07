@@ -25,7 +25,6 @@ class CTCPClientThread implements Runnable {
   private final Semaphore sendSema;
   private final Semaphore recvSema;
   private final int tolerance;
-  private boolean addInfo = false;
 
   /**
    * Constructor.
@@ -69,71 +68,11 @@ class CTCPClientThread implements Runnable {
   public void run() {
     Thread.currentThread().setName("CTCPClientThread (Thread)");
     try {
-
-      if (client.socket == null) {
-        client.createSocket();
-        addInfo = true;
-      }
-
       // Get Input/Output stream for socket
       DataOutputStream dataOutputStream = new DataOutputStream(
               client.socket.getOutputStream());
 
-      // convert payload to string format
-      String tmp = new String(RS.getPayload(), StandardCharsets.UTF_8);
-
-      if (client.addHeader && addInfo) {
-        if (client.replayName.endsWith("-random")) {
-          // cook the custom info
-          String customInfo = String.format("X-rr;%s;%s;%s;X-rr", client.publicIP,
-                  Config.client_replayname, client.CSPair);
-
-          byte[] customInfoByte = customInfo.getBytes();
-          byte[] newPayload;
-
-          // check the length of the payload
-          if (RS.getPayload().length > customInfoByte.length) {
-            newPayload = new byte[RS.getPayload().length];
-            Log.i("Sending", "adding header for random replay");
-            System.arraycopy(customInfoByte, 0, newPayload, 0,
-                    customInfoByte.length);
-            System.arraycopy(RS.getPayload(), customInfoByte.length,
-                    newPayload, customInfoByte.length,
-                    RS.getPayload().length - customInfoByte.length);
-          } else {
-            Log.w("Sending", "payload length shorter than header, replace payload");
-            newPayload = customInfoByte;
-          }
-
-          dataOutputStream.write(newPayload);
-
-        } else if (tmp.length() >= 3
-                && tmp.substring(0, 3).trim().equalsIgnoreCase("GET")) {
-          // cook the custom info
-          String customInfo = String.format("\r\nX-rr: %s;%s;%s\r\n",
-                  client.publicIP, Config.client_replayname, client.CSPair);
-
-          if (tmp.getBytes().length != RS.getPayload().length) {
-            Log.e("Sending", "length of new byte array: " + tmp.getBytes().length
-                    + " length of original payload: " + RS.getPayload().length);
-          }
-
-          String[] parts = tmp.split("\r\n", 2);
-          Log.i("Sending", "adding header for normal replay");
-          tmp = parts[0] + customInfo + parts[1];
-
-          dataOutputStream.write(tmp.getBytes());
-
-        } else {
-          Log.w("Sending", "first packet not touched! content:\n"
-                  + tmp + "\ndst port: " + client.socket.getPort());
-          dataOutputStream.write(RS.getPayload());
-        }
-
-      } else {
-        // send payload directly
-        dataOutputStream.write(RS.getPayload());
-      }
+      dataOutputStream.write(RS.getPayload());
 
       sendSema.release();
 

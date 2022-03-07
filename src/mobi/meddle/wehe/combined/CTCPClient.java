@@ -17,7 +17,6 @@ public class CTCPClient {
   private final int destPort;
   final String replayName;
   final Server publicIP;
-  final boolean addHeader;
   Socket socket = null; //socket to connect to server
 
   /**
@@ -28,10 +27,9 @@ public class CTCPClient {
    * @param destPort   server port to connect to
    * @param replayName name of the replay
    * @param publicIP   IP address of the user's device
-   * @param addHeader  true if header should be added to payload
    */
   public CTCPClient(String cSPair, Server destIP, int destPort,
-                    String replayName, Server publicIP, boolean addHeader) {
+                    String replayName, Server publicIP) {
     this.CSPair = cSPair;
 
     String serverAddr = cSPair.split("-")[1];
@@ -45,7 +43,6 @@ public class CTCPClient {
     this.destPort = destPort;
     this.replayName = replayName;
     this.publicIP = publicIP;
-    this.addHeader = addHeader;
   }
 
   /**

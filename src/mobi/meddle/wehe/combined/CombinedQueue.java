@@ -267,6 +267,10 @@ public class CombinedQueue {
       }
     }
 
+    if (client.socket == null) {
+      client.createSocket();
+    }
+
     cThread.start();
 
     if (Consts.TIMEOUT_ENABLED) {
