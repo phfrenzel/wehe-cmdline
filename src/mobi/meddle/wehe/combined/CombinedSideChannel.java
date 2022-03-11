@@ -222,8 +222,8 @@ public class CombinedSideChannel {
    * @param udpReplayInfoBean bean with info about the UDP replay
    * @return a CombinedNotifierThread
    */
-  public CombinedNotifierThread notifierCreator(UDPReplayInfoBean udpReplayInfoBean) {
-    return new CombinedNotifierThread(udpReplayInfoBean, this.socket);
+  public CombinedNotifierThread notifierCreator(UDPReplayInfoBean udpReplayInfoBean, int expectedStarts) {
+    return new CombinedNotifierThread(udpReplayInfoBean, this.socket, expectedStarts);
   }
 
   /**

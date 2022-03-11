@@ -3,6 +3,7 @@ package mobi.meddle.wehe.combined;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 
 import mobi.meddle.wehe.bean.UDPReplayInfoBean;
 import mobi.meddle.wehe.util.Log;
@@ -17,7 +18,9 @@ public final class CombinedNotifierThread implements Runnable {
   private final UDPReplayInfoBean udpReplayInfoBean;
   private DataInputStream dataInputStream = null;
   private int inProcess = 0;
+  private int expectedStarts = 0;
   private int total = 0;
+  private Socket socket;
 
   /**
    * Constructor.
@@ -25,12 +28,15 @@ public final class CombinedNotifierThread implements Runnable {
    * @param udpReplayInfoBean contains info about a UDP replay
    * @param socket            server socket to connect to
    */
-  CombinedNotifierThread(UDPReplayInfoBean udpReplayInfoBean, Socket socket) {
+  CombinedNotifierThread(UDPReplayInfoBean udpReplayInfoBean, Socket socket, int expectedStarts) {
     this.udpReplayInfoBean = udpReplayInfoBean;
     this.doneSending = false;
+    this.expectedStarts = expectedStarts;
+    this.socket = socket;
 
     if (socket.isConnected()) {
       try {
+        socket.setSoTimeout(1000);
         dataInputStream = new DataInputStream(socket.getInputStream());
       } catch (IOException e) {
         Log.e("Notifier", "Issue getting UDP InputStream", e);
@@ -45,7 +51,16 @@ public final class CombinedNotifierThread implements Runnable {
     Thread.currentThread().setName("CombinedNotifierThread (Thread)");
     try {
       while (true) {
-        if (dataInputStream.available() > 0) {
+        try {
+          if (doneSending) {
+            if (inProcess == 0) {
+              Log.d("Notifier", "Done notifier! total: " + total
+                      + " udpSenderCount: " + udpReplayInfoBean.getSenderCount());
+              socket.setSoTimeout(60000);
+              break;
+            }
+          }
+
           int objLen = 10;
           byte[] data = receiveObject(objLen);
           String[] Notf = new String(data).split(";");
@@ -60,26 +75,19 @@ public final class CombinedNotifierThread implements Runnable {
             Log.wtf("Notifier", "WTF??? Unexpected message received: " + Notf[0]);
             break;
           }
-        } else {
-          try {
-            Thread.sleep(500);
-          } catch (InterruptedException e) {
-            Log.w("Notifier", "Sleep interrupted", e);
-          }
-        }
-
-        if (doneSending) {
-          if (inProcess == 0) {
-            Log.d("Notifier", "Done notifier! total: " + total
-                    + " udpSenderCount: " + udpReplayInfoBean.getSenderCount());
-            break;
-          }
+        } catch (SocketTimeoutException ignored) {
+          Log.d("Notifier", "read timeout. Retrying");
         }
       }
     } catch (Exception e) {
       Log.e("Notifier", "receive data error!", e);
     }
-    Log.i("Notifier", "received all packets!");
+
+    if (total != expectedStarts) {
+      Log.w("Notifier", "Not all UDP streams were replayed! (total: " + total + ", expected: " + expectedStarts + ")");
+    } else {
+      Log.i("Notifier", "received all packets! (all UDP streams successfully replayed)");
+    }
   }
 
   /**
@@ -88,7 +96,7 @@ public final class CombinedNotifierThread implements Runnable {
    * @param objLen Number of bytes to read to obtain the size of the stuff
    * @return response from server
    */
-  private byte[] receiveObject(int objLen) {
+  private byte[] receiveObject(int objLen) throws SocketTimeoutException {
     byte[] recvObjSizeBytes = receiveKbytes(objLen); //receive how big stuff will be
     int recvObjSize = Integer.parseInt(new String(recvObjSizeBytes));
     return receiveKbytes(recvObjSize); //receive stuff
@@ -100,7 +108,7 @@ public final class CombinedNotifierThread implements Runnable {
    * @param k number of bytes to receive
    * @return response from server
    */
-  private byte[] receiveKbytes(int k) {
+  private byte[] receiveKbytes(int k) throws SocketTimeoutException {
     int totalRead = 0;
     byte[] b = new byte[k];
     while (totalRead < k) {
@@ -111,6 +119,8 @@ public final class CombinedNotifierThread implements Runnable {
         if (bytesRead < 0) {
           throw new IOException("Data stream ended prematurely");
         }
+      } catch (SocketTimeoutException e) {
+        throw e;
       } catch (IOException e) {
         Log.e("Notifier", "Error receiving bytes", e);
       }

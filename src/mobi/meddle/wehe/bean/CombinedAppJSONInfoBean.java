@@ -11,12 +11,14 @@ public class CombinedAppJSONInfoBean {
   private ArrayList<String> udpClientPorts; //list of client ports for UDP
   private ArrayList<String> tcpCSPs; //list of client-server pairs for TCP
   private String replayName;
+  private int udpCSPnum;
 
   public CombinedAppJSONInfoBean() {
     Q = new ArrayList<>();
     udpClientPorts = new ArrayList<>();
     tcpCSPs = new ArrayList<>();
     replayName = null;
+    udpCSPnum = 0;
   }
 
   public ArrayList<RequestSet> getQ() {
@@ -49,6 +51,14 @@ public class CombinedAppJSONInfoBean {
 
   public void setReplayName(String replayName) {
     this.replayName = replayName;
+  }
+
+  public void setUdpCSPnum(int num) {
+      this.udpCSPnum = num;
+  }
+
+  public int getUdpCSPnum() {
+      return udpCSPnum;
   }
 
   public boolean isTCP() {

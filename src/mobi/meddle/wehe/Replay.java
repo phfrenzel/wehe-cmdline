@@ -726,6 +726,7 @@ public class Replay {
       }
       appData.setTcpCSPs(csStrArray);
       appData.setReplayName(json.getString(3)); //name of replay
+      appData.setUdpCSPnum(json.getInt(4));
     } catch (JSONException | IOException e) {
       Log.e("UnpickleJSON", "Error reading test files", e);
     }
@@ -985,7 +986,7 @@ public class Replay {
       ArrayList<CombinedNotifierThread> notifiers = new ArrayList<>();
       ArrayList<Thread> notfThreads = new ArrayList<>();
       for (CombinedSideChannel sc : sideChannels) {
-        CombinedNotifierThread notifier = sc.notifierCreator(udpReplayInfoBeans.get(sc.getId()));
+        CombinedNotifierThread notifier = sc.notifierCreator(udpReplayInfoBeans.get(sc.getId()), this.appData.getUdpCSPnum());
         notifiers.add(notifier);
         Thread notfThread = new Thread(notifier);
         notfThread.start();
