@@ -31,6 +31,8 @@ public class Log {
   private static boolean uiAppend = false;
   private static final DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
   private static LocalDateTime now;
+  private static boolean writeLogsToFile = false;
+  private static boolean useInfoFile = false;
 
   public static void d(String tag, String msg) {
     appendLog(" D/", 5, tag, msg);
@@ -75,10 +77,15 @@ public class Log {
     now = LocalDateTime.now();
     tmp.setLength(0);
     tmp.append(dtf.format(now)).append(type).append(tag).append(": ").append(msg).append("\n");
-    logText.append(tmp);
     if (typeI <= Config.logLev) {
       System.out.print(tmp);
     }
+
+    if (!writeLogsToFile) {
+      return;
+    }
+
+    logText.append(tmp);
     //move log to disk every 1000 lines to prevent buffer from using too much memory
     if (logCount > 1000) {
       appendLogFile(true);
@@ -99,8 +106,13 @@ public class Log {
     now = LocalDateTime.now();
     tmp.setLength(0);
     tmp.append(dtf.format(now)).append(" ").append(id).append(": ").append(msg).append("\n");
-    uiText.append(tmp);
     System.out.print(tmp);
+
+    if (!writeLogsToFile) {
+      return;
+    }
+
+    uiText.append(tmp);
     //move log to disk every 1000 lines to prevent buffer from using too much memory
     if (uiCount > 1000) {
       appendLogFile(false);
@@ -121,7 +133,7 @@ public class Log {
     //try to get an existing randomID and historyCount
     boolean needNewInfo = true;
     Path info_file = Paths.get(Config.INFO_FILE);
-    if (Files.exists(info_file)) {
+    if (Files.exists(info_file) && useInfoFile) {
       File file = new File(Config.INFO_FILE);
       Scanner scanner = new Scanner(file);
       if (scanner.hasNextLine()) {
@@ -143,9 +155,12 @@ public class Log {
     if (needNewInfo) {
       randomID = "@" + new RandomString(9).nextString();
       historyCount = 0;
-      File file = new File(Config.INFO_FILE);
-      if (file.getParentFile().mkdirs()) {
-        System.out.println("\tDirectory made: " + file.getParentFile().getName());
+
+      if (useInfoFile) {
+        File file = new File(Config.INFO_FILE);
+        if (file.getParentFile().mkdirs()) {
+          System.out.println("\tDirectory made: " + file.getParentFile().getName());
+        }
       }
     }
     return randomID + ";" + historyCount;
@@ -157,6 +172,10 @@ public class Log {
    * @throws IOException Unable to write to file
    */
   public static void writeInfo() throws IOException {
+    if (!useInfoFile) {
+      return;
+    }
+
     FileWriter writer = new FileWriter(Config.INFO_FILE);
     writer.write(randomID + "\n" + historyCount);
     System.out.println("\tRandomID and History Count written to " + Config.INFO_FILE);
@@ -174,6 +193,10 @@ public class Log {
    * @return program exit code
    */
   public static int writeLogs(int exitCode) {
+    if (!writeLogsToFile) {
+      return exitCode;
+    }
+
     boolean success = appendLogFile(true);
     success = appendLogFile(false) && success;
     if (!success && exitCode == 0) {
