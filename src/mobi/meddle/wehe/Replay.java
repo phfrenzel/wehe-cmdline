@@ -968,12 +968,7 @@ public class Replay {
       //create client for each UDP port
       for (CombinedSideChannel sc : sideChannels) {
         HashMap<String, CUDPClient> udpPortMapping = new HashMap<>();
-        for (String originalClientPort : appData.getUdpClientPorts()) {
-          CUDPClient c = new CUDPClient(Config.publicIP);
-          udpPortMapping.put(originalClientPort, c);
-        }
         udpPortMappings.add(udpPortMapping);
-        Log.i("Replay", "Channel " + sc.getId() + ": created clients from udpClientPorts");
         Log.d("Replay", "Channel " + sc.getId() + ": Size of udpPortMapping is "
                 + udpPortMapping.size());
       }

@@ -334,7 +334,13 @@ public class CombinedQueue {
     }
 
     //get the correct connection to the server
-    CUDPClient client = udpPortMapping.get(clientPort);
+    CUDPClient client = udpPortMapping.get(c_s_pair);
+
+    if (client == null) {
+      client = new CUDPClient(Config.publicIP);
+      udpPortMapping.put(c_s_pair, client);
+      Log.d("CombinedQueue", "Created new UDP client");
+    }
 
     assert client != null;
     if (client.channel == null) {
