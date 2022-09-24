@@ -90,5 +90,9 @@ public final class S {
           + "| whatsapp_incoming_video_1 |\n"
           + "| whatsapp_misc             |\n"
           + "| whatsapp_outgoing_call_1  |\n"
-          + "| whatsapp_outgoing_video_1 |\n";
+          + "| whatsapp_outgoing_video_1 |\n"
+          + "| fm4web_live_1_android     |\n"
+          + "| fm4web_misc_1_android     |\n"
+          + "| messenger_chat_1          |\n"
+          + "| messenger_misc_1          |\n";
 }

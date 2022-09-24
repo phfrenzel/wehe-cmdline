@@ -6,7 +6,7 @@ ADD src /wehe-cmdline/app/src/main/java
 WORKDIR /wehe-cmdline
 RUN gradle build
 
-FROM openjdk:11
+FROM docker.io/openjdk:11
 COPY --from=builder /wehe-cmdline/app/build/libs/app.jar /wehe/
 WORKDIR /wehe
 ENTRYPOINT ["java", "-jar", "app.jar"]

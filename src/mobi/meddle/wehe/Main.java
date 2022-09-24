@@ -33,6 +33,10 @@ public class Main {
       "fm4web_misc_2",
       "fm4_favorite_1",
       "snapchat_chat_1",
+      "fm4web_live_1_android",
+      "fm4web_misc_1_android",
+      "messenger_chat_1",
+      "messenger_misc_1",
   }; //for -n argument
   private static String logLevel = "UI";
 
