@@ -95,4 +95,6 @@ public final class S {
           + "| fm4web_misc_1_android     |\n"
           + "| messenger_chat_1          |\n"
           + "| messenger_misc_1          |\n";
+          + "| messenger_chat_1_android  |\n";
+          + "| messenger_misc_1_android  |\n";
 }

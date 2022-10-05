@@ -37,6 +37,8 @@ public class Main {
       "fm4web_misc_1_android",
       "messenger_chat_1",
       "messenger_misc_1",
+      "messenger_chat_1_android",
+      "messenger_misc_1_android",
   }; //for -n argument
   private static String logLevel = "UI";
 
