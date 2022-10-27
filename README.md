@@ -1,34 +1,94 @@
-# Wehe Command Line Client
+# Modified Wehe Command Line Client for MobileAtlas
 
-This is the Wehe command line client. This app runs tests to help users determine whether their ISPs
-are throttling network traffic for certain apps or ports. Please see https://wehe.meddle.mobi/ for
-more details.
+This repository contains a modified version of the
+[Wehe command-line client](https://github.com/NEU-SNS/wehe-cmdline) used to detect economic
+differentiation in mobile networks via traffic replaying using the MobileAtlas measurement platform.
+
+A brief overview of both the Wehe and MobileAtlas projects can be found in the [repository of the
+modified Wehe server](https://github.com/phfrenzel/wehe-server#project-overview).
+
+## Changes to the Client
+
+### Removal of Analysis Retrieval Logic
+
+Since we are interested in economic differentiation and not in the throttling of network traffic, we
+do not use the analysis server provided by Wehe and thus removed the logic responsible for
+requesting/retrieving results from it.
+
+### Removing Randomised Test Runs
+
+Wehe compares measured throughput information between two replays: One where recorded traffic is
+replayed unaltered and one where payloads are randomised. However, for our work on economic
+differentiation, we do not need these randomised replays since we only need to retrieve billing
+information from the MNO.
+
+### Support for multiple TCP and UDP conversations per test
+
+Initially, Wehe supported only one TCP/UDP conversation per Test. Our changes make it possible to
+create tests from PCAP files that contain many TCP and UDP streams and thus allow tests to better
+reflect the behaviour of the actual applications.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./graphics/ModifiedWehe-whitebg.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./graphics/ModifiedWehe.svg">
+  <img alt="Portraits the support for multiple TCP/UDP conversations per test" 
+  src="./graphics/ModifiedWehe-whitebg.svg">
+</picture>
+
+### Removal of Websocket Dependency/M-Lab
+
+Since we do not use [M-Lab](https://www.measurementlab.net/tests/wehe/) for our tests we were able
+to remove the dependency on the
+[Tyrus](https://mvnrepository.com/artifact/org.glassfish.tyrus.bundles/tyrus-standalone-client)
+Websocket library which was only used in supporting M-Lab.
+
+<!--config update-->
+
+## Adding new Tests
+
+New tests can be created by following these steps:
+
+1. Follow the
+   [instructions](https://github.com/phfrenzel/wehe-server#adding-new-tests)
+   found in the wehe-server repository to generate the necessary files.
+2. Move the generated file called `<testname>.client_all.json` into the `res/` folder
+3. Add a new entry in the `apps_list.json` file:
+   ```json
+   {
+     "name": "<testname>",
+     "time": <time before test times out in seconds>,
+     "image": "<testname>",
+     "category": "",
+     "randomdatafile": "",
+     "datafile": "<testname>.pcap_client_all.json"
+   }
+   ```
+
+## About the Code
+
+* The code is based off of the Wehe [Android Client](https://github.com/NEU-SNS/wehe-android). 
+* Building the source code requires an additional library: 
+  [JSON](https://github.com/stleary/JSON-java)
+  ([Maven repo](https://mvnrepository.com/artifact/org.json/json/20201115)).
+* The `src/` directory contains the source files.
+* The `res/` directory contains the app and port client traffic for the tests.
+* The code runs one test for each shell command.
+
+## Running the client
 
 There are two ways to run the code:
 
 1) Run the jar file (`wehe-cmdline.jar`)
 2) Build from source (use Java 11)
-
-## About the Code
-
-* The code is based off of the Wehe [Android Client](https://github.com/NEU-SNS/wehe-android). 
-* Building the source code requires two additional libraries: 
-  [Tyrus Standalone Client v1.17](https://mvnrepository.com/artifact/org.glassfish.tyrus.bundles/tyrus-standalone-client/1.17)
-  for WebSocket support and [JSON](https://github.com/stleary/JSON-java)
-  ([Maven repo](https://mvnrepository.com/artifact/org.json/json/20201115)).
-* The `src/` directory contains the source files.
-* The `res/` directory contains the app and port client traffic for the tests.
-* The code runs one test (one app/port replay and one "random" replay) for each shell command.
-
-## Run the jar
+3) Use docker to build a container image
 
 A compiled jar comes with the repo (`wehe-cmdline.jar`). This jar was compiled using Java 11.
 
 ### Usage
 
-Usage: `java -jar wehe-cmdline.jar -n <TEST_NAME> [OPTION]...`
+Usage: `java -jar wehe-cmdline.jar -s <SERVER_IPS> -n <TEST_NAME> [OPTION]...`
 
-Example: `java -jar wehe-cmdline.jar -n applemusic -c -r results/ -l info`
+Example: `java -jar wehe-cmdline.jar -s 192.0.2.15,2001:db8::15 -n snapchat_misc -r results/ -l info`
 
 **Options**
 
@@ -50,30 +110,39 @@ when running the Android app) will be printed to the console.
 
 `-v` - Print the version number.
 
-**Tests**
+**Provided Tests**
 
-| Test Names (`-n` arg)        |
-|------------------------------|
-| fm4\_favorite\_1             |
-| fm4\_flow\_1                 |
-| fm4\_misc\_1                 |
-| fm4\_misc\_2                 |
-| fm4\_programme\_1            |
-| fm4\_radio\_1                |
-| fm4\_stories\_scroll\_1      |
-| fm4web\_misc\_1              |
-| fm4web\_misc\_2              |
-| iphone\_idle                 |
-| snapchat\_chat\_1            |
-| snapchat\_map\_1             |
-| snapchat\_misc               |
-| snapchat\_snap\_video\_1     |
-| snapchat\_spotlight\_1       |
-| whatsapp\_incoming\_call\_1  |
-| whatsapp\_incoming\_video\_1 |
-| whatsapp\_misc               |
-| whatsapp\_outgoing\_call\_1  |
-| whatsapp\_outgoing\_video\_1 |
+| Test Names (`-n` arg)             |
+|-----------------------------------|
+| fm4\_favorite\_1                  |
+| fm4\_flow\_1                      |
+| fm4\_misc\_1                      |
+| fm4\_misc\_2                      |
+| fm4\_programme\_1                 |
+| fm4\_radio\_1                     |
+| fm4\_stories\_scroll\_1           |
+| fm4web\_misc\_1                   |
+| fm4web\_misc\_2                   |
+| iphone\_idle                      |
+| snapchat\_chat\_1                 |
+| snapchat\_map\_1                  |
+| snapchat\_misc                    |
+| snapchat\_snap\_video\_1          |
+| snapchat\_spotlight\_1            |
+| whatsapp\_incoming\_call\_1       |
+| whatsapp\_incoming\_video\_1      |
+| whatsapp\_misc                    |
+| whatsapp\_outgoing\_call\_1       |
+| whatsapp\_outgoing\_video\_1      |
+| fm4web\_live\_1\_android          |
+| fm4web\_misc\_1\_android          |
+| messenger\_chat\_1                |
+| messenger\_misc\_1                |
+| messenger\_chat\_1\_android       |
+| messenger\_misc\_1\_android       |
+| messenger\_chat\_1\_android\_ipv4 |
+| messenger\_misc\_1\_android\_ipv4 |
+| messenger\_android\_z\_p4         |
 
 ### Output
 
@@ -126,3 +195,10 @@ located.
 
 **NOTE:** If the Exit Code is negative, then two errors occurred: the number in the Exit Code and 
 `ERR_WR_LOGS`. For example, `-24` means no result was found and the logs could not be written to disk.
+
+## Funding
+
+This project is funded through the [NGI0 PET](https://nlnet.nl/PET) Fund, a fund established by
+NLnet with financial support from the European Commission's [Next Generation
+Internet](https://ngi.eu/) programme, under the aegis of DG Communications Networks, Content and
+Technology under grant agreement No 825310.
