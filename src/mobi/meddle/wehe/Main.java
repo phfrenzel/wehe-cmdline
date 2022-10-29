@@ -6,43 +6,24 @@ import mobi.meddle.wehe.util.Config;
 import mobi.meddle.wehe.util.Log;
 import mobi.meddle.wehe.bean.Server;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.IOException;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Scanner;
+import java.util.ArrayList;
+
 /**
  * Main class for Wehe command line client.
  */
 public class Main {
 
-  private static final String[] APP_IDS = {
-      "snapchat_spotlight_1",
-      "snapchat_snap_video_1",
-      "fm4_flow_1",
-      "fm4_radio_1",
-      "iphone_idle",
-      "snapchat_map_1",
-      "whatsapp_outgoing_call_1",
-      "fm4_misc_2",
-      "snapchat_misc",
-      "whatsapp_incoming_video_1",
-      "whatsapp_misc",
-      "whatsapp_outgoing_video_1",
-      "whatsapp_incoming_call_1",
-      "fm4_programme_1",
-      "snapchat_shutdown",
-      "fm4_stories_scroll_1",
-      "fm4web_misc_1",
-      "fm4_misc_1",
-      "fm4web_misc_2",
-      "fm4_favorite_1",
-      "snapchat_chat_1",
-      "fm4web_live_1_android",
-      "fm4web_misc_1_android",
-      "messenger_chat_1",
-      "messenger_misc_1",
-      "messenger_chat_1_android",
-      "messenger_misc_1_android",
-      "messenger_chat_1_android_ipv4",
-      "messenger_misc_1_android_ipv4",
-      "messenger_android_z_p4",
-  }; //for -n argument
+  private static ArrayList<String> testNames;
   private static String logLevel = "UI";
 
   /**
@@ -51,6 +32,12 @@ public class Main {
    * @param args command line arguments
    */
   public static void main(String[] args) {
+    testNames = getTestNames();
+
+    if (testNames == null) {
+      System.exit(Consts.ERR_GENERAL);
+    }
+
     parseArgs(args);
     Log.ui("Configs", "\n\tReplay name: " + Config.appName
             + "\n\tServer name: " + Config.serverDisplay
@@ -134,7 +121,7 @@ public class Main {
         case "-n": //name of test
           boolean found = false;
           String name = arg.toLowerCase().strip();
-          for (String id : APP_IDS) { //make sure test name is valid
+          for (String id : testNames) { //make sure test name is valid
             if (name.equals(id)) {
               found = true;
               break;
@@ -204,5 +191,47 @@ public class Main {
           printError("Something went horribly wrong parsing arguments.");
       }
     }
+  }
+
+  private static ArrayList<String> getTestNames() {
+    try {
+      //get apps_list.json
+      StringBuilder buf = new StringBuilder();
+      File appInfo = new File(Config.APPS_FILENAME);
+      Path tests_info_file = Paths.get(Config.APPS_FILENAME);
+      if (!Files.exists(tests_info_file)) {
+        Log.e("Load test names", "\"" + Config.APPS_FILENAME + "\" file not found.");
+        return null;
+      }
+
+      //read the apps/ports in the file
+      Scanner scanner = new Scanner(appInfo);
+      while (scanner.hasNextLine()) {
+        buf.append(scanner.nextLine());
+      }
+
+      JSONObject jObject = new JSONObject(buf.toString());
+      JSONArray jArray = jObject.getJSONArray("apps");
+
+      JSONObject appObj;
+      ArrayList<String> names = new ArrayList();
+      for (int i = 0; i < jArray.length(); i++) {
+        appObj = jArray.getJSONObject(i);
+        names.add(appObj.getString("image"));
+      }
+
+      if (names.isEmpty()) {
+        Log.e("Load test names", "No tests configured in " + Config.APPS_FILENAME);
+        System.out.println("No tests configured in " + Config.APPS_FILENAME);
+        return null;
+      }
+
+      return names;
+    } catch (IOException e) {
+      Log.e(Consts.LOG_APP_NAME, "IOException while reading file " + Config.APPS_FILENAME, e);
+    } catch (JSONException e) {
+      Log.e(Consts.LOG_APP_NAME, "JSONException while parsing file " + Config.APPS_FILENAME, e);
+    }
+    return null;
   }
 }
